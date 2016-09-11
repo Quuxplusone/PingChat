@@ -7,6 +7,8 @@
         <p>Ping is powered by <a href="http://www.pubnub.com">PubNub</a>.<br>
         Messages are broadcast to everyone <i>in the room right now</i>; they are not saved anywhere.</p>
 
+        <div style="position:absolute;right:0;top:0;"><button id="ScrollLock" onclick="onclickSL()">Autoscroll is ON</button></div>
+
         <p>What is your name? <textarea id="WhatIsYourName" rows="1" onkeydown="keydownWIYN(arguments[0] || window.event)"></textarea></p>
         <p id="History"></p>
         <textarea id="EditMessage" rows="2" onkeydown="keydownEM(arguments[0] || window.event)" onfocus="focusEM()" readonly></textarea>
@@ -17,7 +19,20 @@
 <script type="text/javascript">
 
 var debug_mode = false;
+var autoscroll_mode = true;
 var ping = null;
+
+function onclickSL() {
+    autoscroll_mode = !autoscroll_mode;
+    var scroll_lock_button = document.getElementById('ScrollLock');
+    scroll_lock_button.value = 'Autoscroll is ' + (autoscroll_mode ? 'ON' : 'OFF');
+}
+
+function maybeScrollDown() {
+    if (autoscroll_mode) {
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+}
 
 function keydownWIYN(event) {
     if (event.keyCode != 13) return;
@@ -102,6 +117,7 @@ function logToHistory(text) {
         p.appendChild(log);
     var history = document.getElementById("History");
     history.appendChild(p);
+    maybeScrollDown();
 }
 
 function addStageDirectionToHistory(message, didWhat) {
@@ -113,6 +129,7 @@ function addStageDirectionToHistory(message, didWhat) {
         p.appendChild(entrance);
     var history = document.getElementById("History");
     history.appendChild(p);
+    maybeScrollDown();
 }
 
 function addMessageToHistory(me, message) {
@@ -157,6 +174,7 @@ function addMessageToHistory(me, message) {
     }
     var history = document.getElementById("History");
     history.appendChild(p);
+    maybeScrollDown();
 }
 
 function initializePing(my_name) {
@@ -183,7 +201,7 @@ function initializePing(my_name) {
         pmButton.id = "PM" + conspirator.name;
         pmButton.value = "PM " + conspirator.name;
         pmButton.style.color = colorFromID(conspirator.id);
-        pmButton.onclick = function() { onclickPM(conspirator); };
+        pmButton.onclick = onclickPM.bind(null, conspirator);
         var buttons = document.getElementById("PMButtons");
         buttons.appendChild(pmButton);
     };
