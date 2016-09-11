@@ -22,11 +22,12 @@ var ping = null;
 function keydownWIYN(event) {
     if (event.keyCode != 13) return;
     var editor = document.getElementById('WhatIsYourName');
-    if (editor.value != "") {
-        var my_name = editor.value;
+    var my_name = editor.value;
+    if (my_name != "") {
+        editor.onkeydown = undefined;
+        editor.readOnly = true;
         initializePing(my_name);
         window.onbeforeunload = function() { ping.sendExit(); };
-        editor.readOnly = true;
         var editmessage = document.getElementById('EditMessage');
         editmessage.readOnly = false;
         editmessage.focus();
@@ -159,6 +160,7 @@ function addMessageToHistory(me, message) {
 }
 
 function initializePing(my_name) {
+    if (ping != null) return;
     ping = Ping(my_name);
     ping.onDebug = function(message) {
         logToHistory(message);
@@ -170,16 +172,20 @@ function initializePing(my_name) {
         }
     };
     ping.onHandshake = function(me, conspirator) {
-        var pmButton = document.getElementById("PM" + conspirator.id);
-        if (pmButton == null) {
-            pmButton = document.createElement("input");
-            pmButton.type = "button";
-            pmButton.id = "PM" + conspirator.id;
-            pmButton.value = "PM " + conspirator.name;
-            pmButton.onclick = function() { onclickPM(conspirator); };
+        if (me.Is(conspirator)) return;
+        var pmButton = document.getElementById("PM" + conspirator.name);
+        if (pmButton != null) {
             var buttons = document.getElementById("PMButtons");
-            buttons.appendChild(pmButton);
+            buttons.removeChild(pmButton);
         }
+        pmButton = document.createElement("input");
+        pmButton.type = "button";
+        pmButton.id = "PM" + conspirator.name;
+        pmButton.value = "PM " + conspirator.name;
+        pmButton.style.color = colorFromID(conspirator.id);
+        pmButton.onclick = function() { onclickPM(conspirator); };
+        var buttons = document.getElementById("PMButtons");
+        buttons.appendChild(pmButton);
     };
     ping.onExit = function(me, message) {
         addStageDirectionToHistory(message, " left the room.");
