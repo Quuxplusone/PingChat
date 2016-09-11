@@ -57,26 +57,6 @@ function randomBits(length) {
     return result;
 }
 
-var PUBNUB_demo = PUBNUB.init({
-    publish_key: 'demo',
-    subscribe_key: 'demo'
-});
-var me = {
-    id: randomBits(31).toString(16),
-    name: null,
-    Is: function(rhs) { return this.id == rhs.id && this.name == rhs.name; },
-    Isnt: function(rhs) { return !this.Is(rhs); },
-    IsUninitialized: function() { return this.name == null; }
-};
-var main_channel = 'ping_1287376';
-var secret_channels = {};
-var debug_mode = false;
-
-PUBNUB_demo.subscribe({
-    channel: main_channel,
-    message: receiveMessageViaPubnub
-});
-
 function publish(channel, message, then) {
     var msg = {
         channel: channel,
@@ -390,6 +370,27 @@ function disablePrivateMessaging(target) {
         }
     }
 }
+
+var PUBNUB_demo = PUBNUB.init({
+    publish_key: 'demo',
+    subscribe_key: 'demo'
+});
+
+var me = {
+    id: randomBits(31).toString(16),
+    name: null,
+    Is: function(rhs) { return this.id == rhs.id && this.name == rhs.name; },
+    Isnt: function(rhs) { return !this.Is(rhs); },
+    IsUninitialized: function() { return this.name == null; }
+};
+var main_channel = 'ping_1287376';
+var secret_channels = {};
+var debug_mode = false;
+
+PUBNUB_demo.subscribe({
+    channel: main_channel,
+    message: receiveMessageViaPubnub
+});
 
 </script>
     </body>
