@@ -1,0 +1,254 @@
+<html>
+    <head>
+        <title>Ping</title>
+    </head>
+    <body>
+        <h1>Ping</h1>
+        <p>Ping is powered by <a href="http://www.pubnub.com">PubNub</a>.<br>
+        Messages are broadcast to everyone <i>in the room right now</i>; they are not saved anywhere.<br>
+        Be aware that Ping's "private" messaging is not secure!</p>
+
+        <p>What is your name? <textarea id="WhatIsYourName" rows="1" onkeydown="keydownWIYN(arguments[0] || window.event)"></textarea></p>
+        <p id="History"></p>
+        <textarea id="EditMessage" rows="2" onkeydown="keydownEM(arguments[0] || window.event)" onfocus="focusEM()" readonly></textarea>
+        <div id="PMButtons"></div>
+
+<script src="https://cdn.pubnub.com/pubnub.min.js"></script>
+<script type="text/javascript">
+
+String.prototype.hashCode = function() {
+  var hash = 0, i, chr, len;
+  if (this.length == 0) return hash;
+  for (i = 0, len = this.length; i < len; i++) {
+    chr   = this.charCodeAt(i);
+    hash  = ((hash << 5) - hash) + chr;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return hash;
+};
+
+function randomString(length) {
+    var str = "";
+    for (var i = 0; i < length; ++i) {
+        str += "0123456789ABCDEF"[Math.floor(Math.random()*16)];
+    }
+    return str;
+}
+
+var PUBNUB_demo = PUBNUB.init({
+    publish_key: 'demo',
+    subscribe_key: 'demo'
+});
+var me = {
+    id: randomString(32),
+    name: "Bob",
+    Is: function(rhs) { return this.id == rhs.id && this.name == rhs.name; },
+    Isnt: function(rhs) { return !this.Is(rhs); }
+};
+
+PUBNUB_demo.subscribe({
+    channel: 'ping_1287376',
+    message: receiveMessageViaPubnub
+});
+
+function sendMessageViaPubnub(messageText) {
+    PUBNUB_demo.publish({
+        channel: 'ping_1287376',
+        message: {
+            sender: me,
+            text: messageText
+        }
+    });
+}
+
+function sendPrivateMessageViaPubnub(recipient, messageText) {
+    PUBNUB_demo.publish({
+        channel: 'ping_1287376',
+        message: {
+            sender: me,
+            privateTo: recipient,
+            text: messageText
+        }
+    });
+}
+
+function sendEntranceViaPubnub() {
+    PUBNUB_demo.publish({
+        channel: 'ping_1287376',
+        message: {
+            sender: me,
+            enteredTheRoom: true
+        }
+    });
+}
+
+function sendExitViaPubnub() {
+    PUBNUB_demo.publish({
+        channel: 'ping_1287376',
+        message: {
+            sender: me,
+            leftTheRoom: true
+        }
+    });
+}
+
+
+function keydownWIYN(event) {
+    if (event.keyCode != 13) return;
+    var editor = document.getElementById('WhatIsYourName');
+    if (editor.value != "") {
+        me.name = editor.value;
+        editor.readOnly = true;
+        var editmessage = document.getElementById('EditMessage');
+        editmessage.readOnly = false;
+        editmessage.focus();
+        window.onbeforeunload = sendExitViaPubnub;
+        sendEntranceViaPubnub();
+        event.preventDefault();
+    }
+}
+
+function keydownEM(event) {
+    if (event.keyCode != 13) return;
+    var editor = document.getElementById('EditMessage');
+    sendMessageViaPubnub(editor.value);
+    editor.value = "";
+    event.preventDefault();
+}
+
+function onclickPM(target) {
+    var editor = document.getElementById('EditMessage');
+    sendPrivateMessageViaPubnub(target, editor.value);
+    editor.value = "";
+}
+
+function focusEM() {
+    document.title = "Ping";
+}
+
+
+function colorFromID(id) {
+    var colors = ['blue', 'blueviolet', 'brown', 'cadetblue', 'chocolate', 'coral',
+              'cornflowerblue', 'crimson', 'darkblue', 'darkcyan', 'darkgoldenrod',
+              'darkgreen', 'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid',
+              'darkred', 'darkslateblue', 'darkslategray', 'darkviolet', 'deeppink',
+              'dimgray', 'dodgerblue', 'firebrick', 'forestgreen', 'goldenrod', 'gray',
+              'green', 'hotpink', 'indianred', 'indigo', 'lightcoral', 'lightseagreen',
+              'lightslategray', 'lightsteelblue', 'limegreen', 'magenta', 'maroon',
+              'mediumaquamarine', 'mediumblue', 'mediumorchid', 'mediumpurple',
+              'mediumseagreen', 'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
+              'mediumvioletred', 'midnightblue', 'navy', 'olive', 'olivedrab', 'orange',
+              'orangered', 'orchid', 'palevioletred', 'peru', 'plum', 'purple', 'red',
+              'royalblue', 'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'sienna',
+              'slateblue', 'slategray', 'teal', 'tomato', 'violet', 'yellowgreen'];
+    var nColors = colors.length;
+    var i = id.hashCode() % colors.length;
+    return colors[i];
+}
+
+function notifyPageTitle(who) {
+    document.title = "***PING***";
+}
+
+function addStageDirectionToHistory(message, didWhat) {
+    var p = document.createElement("div");
+        var entrance = document.createElement("span");
+        entrance.style.fontWeight = "bold";
+        entrance.style.color = colorFromID(message.sender.id);
+        entrance.textContent = message.sender.name + didWhat;
+        p.appendChild(entrance);
+    var history = document.getElementById("History");
+    history.appendChild(p);
+}
+
+function addMessageToHistory(message) {
+    var p = document.createElement("div");
+    if (message.text.substring(0,4) == "/me ") {
+        var sender = document.createElement("span");
+        sender.style.fontWeight = "bold";
+        sender.style.fontStyle = "italic";
+        sender.style.color = colorFromID(message.sender.id);
+        sender.textContent = message.sender.name;
+        if ('privateTo' in message) {
+            if (me.Is(message.sender)) {
+                sender.textContent += " (privately to " + message.privateTo.name + ")";
+            } else {
+                sender.textContent += " (privately)";
+            }
+        }
+        sender.textContent += message.text.substring(3);
+        p.appendChild(sender);
+    } else {
+        var sender = document.createElement("span");
+        sender.style.fontWeight = "bold";
+        sender.style.color = colorFromID(message.sender.id);
+        sender.textContent = message.sender.name;
+        if ('privateTo' in message) {
+            if (me.Is(message.sender)) {
+                sender.textContent += " (privately to " + message.privateTo.name + ")";
+            } else {
+                sender.textContent += " (private)";
+            }
+        }
+        sender.textContent += ": ";
+        var text = document.createTextNode(message.text);
+        p.appendChild(sender);
+        p.appendChild(text);
+    }
+    var history = document.getElementById("History");
+    history.appendChild(p);
+}
+
+function receiveMessageViaPubnub(message) {
+    if ('privateTo' in message && me.Isnt(message.privateTo) && me.Isnt(message.sender)) {
+        // gentlemen do not display each other's mail
+        return;
+    }
+
+    if ('enteredTheRoom' in message) {
+        enablePrivateMessaging(message.sender);
+        addStageDirectionToHistory(message, " entered the room.");
+        if (me.Isnt(message.sender)) notifyPageTitle(message);
+    } else if ('leftTheRoom' in message) {
+        disablePrivateMessaging(message.sender);
+        addStageDirectionToHistory(message, " left the room.");
+    } else if ('text' in message) {
+        enablePrivateMessaging(message.sender);
+        addMessageToHistory(message);
+        if (me.Isnt(message.sender)) notifyPageTitle(message);
+    } else {
+        message.text = message.toString();
+        message.sender = {
+            id: '0',
+            name: 'Got a malformed message'
+        };
+        addMessageToHistory(message);
+    }
+}
+
+function enablePrivateMessaging(target) {
+    if (me.Is(target)) return;
+    var pmButton = document.getElementById("PM" + target.id);
+    if (pmButton == null) {
+        pmButton = document.createElement("input");
+        pmButton.type = "button";
+        pmButton.id = "PM" + target.id;
+        pmButton.value = "PM " + target.name;
+        pmButton.onclick = function() { onclickPM(target); };
+        var buttons = document.getElementById("PMButtons");
+        buttons.appendChild(pmButton);
+    }
+}
+
+function disablePrivateMessaging(target) {
+    if (me.Is(target)) return;
+    var pmButton = document.getElementById("PM" + target.id);
+    if (pmButton != null) {
+        var buttons = document.getElementById("PMButtons");
+        buttons.removeChild(pmButton);
+    }
+}
+
+</script>
+    </body>
+</html>
