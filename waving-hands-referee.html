@@ -1,0 +1,189 @@
+<html>
+    <head>
+        <title>Ping</title>
+    </head>
+    <body>
+        <h1>Waving Hands Referee</h1>
+
+        <div style="position:absolute;right:0;top:0;"><button id="ScrollLock" onclick="onclickSL()">Autoscroll is ON</button></div>
+
+        <p id="History"></p>
+
+<script src="https://cdn.pubnub.com/pubnub.min.js"></script>
+<script src="./ping.js"></script>
+<script src="./waving-hands.js"></script>
+<script type="text/javascript">
+
+var debug_mode = true;
+var autoscroll_mode = true;
+var ping = null;
+
+function onclickSL() {
+    autoscroll_mode = !autoscroll_mode;
+    var scroll_lock_button = document.getElementById('ScrollLock');
+    scroll_lock_button.value = 'Autoscroll is ' + (autoscroll_mode ? 'ON' : 'OFF');
+}
+
+function maybeScrollDown() {
+    if (autoscroll_mode) {
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+}
+
+String.prototype.hashCode = function() {
+    var hash = 0;
+    var len = this.length;
+    for (var i = 0; i < len; i++) {
+        hash = ((31*hash) ^ this.charCodeAt(i)) & ((1 << 52)-1);
+    }
+    return hash;
+};
+
+function colorFromID(id) {
+    var colors = ['blue', 'blueviolet', 'brown', 'cadetblue', 'chocolate', 'coral',
+              'cornflowerblue', 'crimson', 'darkblue', 'darkcyan', 'darkgoldenrod',
+              'darkgreen', 'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid',
+              'darkred', 'darkslateblue', 'darkslategray', 'darkviolet', 'deeppink',
+              'dimgray', 'dodgerblue', 'firebrick', 'forestgreen', 'goldenrod', 'gray',
+              'green', 'hotpink', 'indianred', 'indigo', 'lightcoral', 'lightseagreen',
+              'lightslategray', 'lightsteelblue', 'limegreen', 'magenta', 'maroon',
+              'mediumaquamarine', 'mediumblue', 'mediumorchid', 'mediumpurple',
+              'mediumseagreen', 'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
+              'mediumvioletred', 'midnightblue', 'navy', 'olive', 'olivedrab', 'orange',
+              'orangered', 'orchid', 'palevioletred', 'peru', 'plum', 'purple', 'red',
+              'royalblue', 'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'sienna',
+              'slateblue', 'slategray', 'teal', 'tomato', 'violet', 'yellowgreen'];
+    var nColors = colors.length;
+    var i = id.hashCode() % colors.length;
+    return colors[i];
+}
+
+function logToHistory(text) {
+    if (!debug_mode) return;
+    var p = document.createElement("div");
+        var log = document.createElement("span");
+        log.style.fontStyle = "italic";
+        log.textContent = text;
+        p.appendChild(log);
+    var history = document.getElementById("History");
+    history.appendChild(p);
+    maybeScrollDown();
+}
+
+function addStageDirectionToHistory(message, didWhat) {
+    var p = document.createElement("div");
+        var entrance = document.createElement("span");
+        entrance.style.fontWeight = "bold";
+        entrance.style.color = colorFromID(message.sender.id);
+        entrance.textContent = message.sender.name + didWhat;
+        p.appendChild(entrance);
+    var history = document.getElementById("History");
+    history.appendChild(p);
+    maybeScrollDown();
+}
+
+function addMessageToHistory(me, message) {
+    var p = document.createElement("div");
+    if (message.text.substring(0,4) == "/me ") {
+        var sender = document.createElement("span");
+        sender.style.fontWeight = "bold";
+        sender.style.fontStyle = "italic";
+        sender.style.color = colorFromID(message.sender.id);
+        sender.textContent = message.sender.name;
+        if ('recipient' in message) {
+            if (me.Is(message.sender)) {
+                sender.textContent += " (privately to " + message.recipient.name + ")";
+            } else {
+                sender.textContent += " (privately)";
+            }
+        }
+        sender.textContent += message.text.substring(3);
+        p.appendChild(sender);
+    } else {
+        var sender = document.createElement("span");
+        sender.style.fontWeight = "bold";
+        sender.style.color = colorFromID(message.sender.id);
+        sender.textContent = message.sender.name;
+        if ('recipient' in message) {
+            if (me.Is(message.sender)) {
+                sender.textContent += " (privately to " + message.recipient.name + ")";
+            } else {
+                sender.textContent += " (private)";
+            }
+        }
+        sender.textContent += ": ";
+        var text = document.createTextNode(message.text);
+	if (message.text.indexOf('\n') >= 0) {
+	    // Format text with embedded newlines as <pre>, since it probably came from a cut-and-paste.
+	    var pre = document.createElement("pre");
+	    pre.appendChild(text);
+	    text = pre;
+	}
+        p.appendChild(sender);
+        p.appendChild(text);
+    }
+    var history = document.getElementById("History");
+    history.appendChild(p);
+    maybeScrollDown();
+}
+
+var wizards = {};  // map from name to Ping-recipient
+
+var ping = Ping('Waving Hands Referee');
+var waving_hands = WavingHands();
+
+ping.onDebug = logToHistory;
+ping.onEntrance = function(me, message) { addStageDirectionToHistory(message, " entered the room."); };
+ping.onExit = function(me, message) { addStageDirectionToHistory(message, " left the room."); };
+ping.onPublicMessage = function(me, message) {
+    addMessageToHistory(me, message);
+    if (message.text == '/wh join') {
+        if (!(message.sender.name in wizards) && waving_hands.addWizard(message.sender.name)) {
+            wizards[message.sender.name] = message.sender;
+            ping.sendPublicMessage(message.sender.name + ' has joined the game of Waving Hands!');
+        } else {
+            ping.sendPublicMessage(message.sender.name + "'s application to Hogwarts was rejected.");
+        }
+    }
+};
+ping.onPrivateMessage = function(me, message) {
+    addMessageToHistory(me, message);
+    if (message.text == '/wh join') {
+        if (!(message.sender.name in wizards) && waving_hands.addWizard(message.sender.name)) {
+            wizards[message.sender.name] = message.sender;
+            ping.sendPublicMessage(message.sender.name + ' has joined the game of Waving Hands!');
+        } else {
+            ping.sendPrivateMessage(message.sender, 'Sorry, your application to Hogwarts was rejected.');
+        }
+    } else if (message.text.startsWith('/wh l ')) {
+        waving_hands.setLeftAction(message.sender.name, message.text.substring(6,7));
+    } else if (message.text.startsWith('/wh r ')) {
+        waving_hands.setRightAction(message.sender.name, message.text.substring(6,7));
+    }
+    if (waving_hands.readyToResolve()) {
+        resolveThisTurn();
+    }
+};
+
+var impending_resolve = null;
+
+function resolveThisTurn() {
+    window.clearTimeout(impending_resolve);
+    document.title = 'Turn ' + waving_hands.turnNumber;
+    if (waving_hands.numberOfWizards() <= 0) {
+        logToHistory('Waiting for more wizards to join the game...');
+    } else {
+        var summary = waving_hands.resolveTurn();
+        ping.sendPublicMessage(summary);
+    }
+    impending_resolve = window.setTimeout(resolveThisTurn, 10000);
+}
+
+ping.start();
+waving_hands.start();
+ping.sendEntrance();
+impending_resolve = setTimeout(resolveThisTurn, 10000);
+
+</script>
+    </body>
+</html>
