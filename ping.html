@@ -5,8 +5,7 @@
     <body>
         <h1>Ping</h1>
         <p>Ping is powered by <a href="http://www.pubnub.com">PubNub</a>.<br>
-        Messages are broadcast to everyone <i>in the room right now</i>; they are not saved anywhere.<br>
-        Be aware that Ping's "private" messaging is not secure!</p>
+        Messages are broadcast to everyone <i>in the room right now</i>; they are not saved anywhere.</p>
 
         <p>What is your name? <textarea id="WhatIsYourName" rows="1" onkeydown="keydownWIYN(arguments[0] || window.event)"></textarea></p>
         <p id="History"></p>
@@ -16,23 +15,46 @@
 <script src="https://cdn.pubnub.com/pubnub.min.js"></script>
 <script type="text/javascript">
 
+// Javascript can precisely represent numbers up to (1 << 53),
+// which means that the inputs to this function must satisfy
+//    base < modulus
+//    log(exp) < 53
+//    log(modulus) < 26
+//
+function modular_exponentiate(base, exp, modulus) {
+    var result = 1;
+    while (exp != 0) {
+        if ((exp & 1) == 1) {
+            result = (result * base) % modulus;
+        }
+        base = (base * base) % modulus;
+        exp >>= 1;
+    }
+    return result;
+}
+
 String.prototype.hashCode = function() {
-  var hash = 0, i, chr, len;
-  if (this.length == 0) return hash;
-  for (i = 0, len = this.length; i < len; i++) {
-    chr   = this.charCodeAt(i);
-    hash  = ((hash << 5) - hash) + chr;
-    hash |= 0; // Convert to 32bit integer
-  }
-  return hash;
+    var hash = 0;
+    var len = this.length;
+    for (var i = 0; i < len; i++) {
+        hash = ((31*hash) ^ this.charCodeAt(i)) & ((1 << 52)-1);
+    }
+    return hash;
 };
 
-function randomString(length) {
-    var str = "";
-    for (var i = 0; i < length; ++i) {
-        str += "0123456789ABCDEF"[Math.floor(Math.random()*16)];
+// Javascript can precisely represent numbers up to (1 << 53),
+// which means that the input to this function must satisfy
+//    length < 53
+//
+function randomBits(length) {
+    var result = 0;
+    while (length != 0) {
+        var bits = Math.min(length, 4);
+        var r = Math.floor(Math.random() * (1 << bits));
+        result = (result << bits) | r;
+        length -= bits;
     }
-    return str;
+    return result;
 }
 
 var PUBNUB_demo = PUBNUB.init({
@@ -40,55 +62,110 @@ var PUBNUB_demo = PUBNUB.init({
     subscribe_key: 'demo'
 });
 var me = {
-    id: randomString(32),
-    name: "Bob",
+    id: randomBits(31).toString(16),
+    name: null,
     Is: function(rhs) { return this.id == rhs.id && this.name == rhs.name; },
-    Isnt: function(rhs) { return !this.Is(rhs); }
+    Isnt: function(rhs) { return !this.Is(rhs); },
+    IsUninitialized: function() { return this.name == null; }
 };
+var main_channel = 'ping_1287376';
+var secret_channels = {};
+var debug_mode = false;
 
 PUBNUB_demo.subscribe({
-    channel: 'ping_1287376',
+    channel: main_channel,
     message: receiveMessageViaPubnub
 });
 
-function sendMessageViaPubnub(messageText) {
-    PUBNUB_demo.publish({
-        channel: 'ping_1287376',
-        message: {
-            sender: me,
-            text: messageText
+function publish(channel, message, then) {
+    var msg = {
+        channel: channel,
+        message: message
+    };
+    msg.callback = function(result) {
+        if (result[0] == 0) {
+            logToHistory("Retrying publish due to failure condition " + JSON.stringify(result));
+            window.setTimeout(function() { PUBNUB_demo.publish(msg); }, 50);
+        } else {
+            if (then !== undefined) {
+                then();
+            }
         }
+    };
+    PUBNUB_demo.publish(msg);
+}
+
+function sendMessageViaPubnub(messageText) {
+    publish(main_channel, {
+        sender: me,
+        text: messageText
     });
+}
+
+function sendSecretHandshakeViaPubnub(target, continuation) {
+    if (target.id in secret_channels) return;
+    var g = 115183;
+    var p = 67092953;
+    var a = randomBits(26);
+    var ga = modular_exponentiate(g, a, p);
+    secret_channels[target.id] = a;
+    publish(main_channel, {
+        sender: me,
+        recipient: target,
+        secretHandshake: ga
+    }, continuation);
+}
+
+function receiveSecretHandshakeViaPubnub(message) {
+    if (me.Isnt(message.recipient)) return;
+    var target = message.sender;
+
+    function continuation() {
+        var g = 115183;
+        var p = 67092953;
+        var a = secret_channels[target.id];
+        if (typeof a !== 'number') {
+            logToHistory('Oops! In receiveSecretHandshakeViaPubnub, secret_channels[' + target.id + '] is ' + JSON.stringify(a));
+            return;
+        }
+        var gb = message.secretHandshake;
+        var gab = modular_exponentiate(gb, a, p);
+        var secret_channel = 'ping_PM_' + gab.toString(16);
+        secret_channels[target.id] = secret_channel;
+        logToHistory("Subscribing to channel " + secret_channel + "...");
+
+        PUBNUB_demo.subscribe({
+            channel: secret_channel,
+            message: receiveSecretMessageViaPubnub
+        });
+
+        enablePrivateMessaging(target);
+    }
+
+    if (!(target.id in secret_channels)) {
+        sendSecretHandshakeViaPubnub(target, continuation);
+    } else {
+        continuation();
+    }
 }
 
 function sendPrivateMessageViaPubnub(recipient, messageText) {
-    PUBNUB_demo.publish({
-        channel: 'ping_1287376',
-        message: {
-            sender: me,
-            privateTo: recipient,
-            text: messageText
-        }
+    var secret_channel = secret_channels[recipient.id];
+    if (typeof secret_channel !== 'string') {
+        logToHistory('Oops! In sendPrivateMessageViaPubnub, secret_channels[' + recipient.id + '] is ' + JSON.stringify(secret_channel));
+        return;
+    }
+    publish(secret_channel, {
+        sender: me,
+        recipient: recipient,
+        text: messageText
     });
 }
 
-function sendEntranceViaPubnub() {
-    PUBNUB_demo.publish({
-        channel: 'ping_1287376',
-        message: {
-            sender: me,
-            enteredTheRoom: true
-        }
-    });
-}
-
-function sendExitViaPubnub() {
-    PUBNUB_demo.publish({
-        channel: 'ping_1287376',
-        message: {
-            sender: me,
-            leftTheRoom: true
-        }
+function sendStageDirectionViaPubnub(type) {
+    publish(main_channel, {
+        sender: me,
+        stageDirection: type
     });
 }
 
@@ -98,12 +175,12 @@ function keydownWIYN(event) {
     var editor = document.getElementById('WhatIsYourName');
     if (editor.value != "") {
         me.name = editor.value;
+        window.onbeforeunload = function() { sendStageDirectionViaPubnub('exit'); };
         editor.readOnly = true;
         var editmessage = document.getElementById('EditMessage');
         editmessage.readOnly = false;
         editmessage.focus();
-        window.onbeforeunload = sendExitViaPubnub;
-        sendEntranceViaPubnub();
+        sendStageDirectionViaPubnub('enter');
         event.preventDefault();
     }
 }
@@ -111,7 +188,13 @@ function keydownWIYN(event) {
 function keydownEM(event) {
     if (event.keyCode != 13) return;
     var editor = document.getElementById('EditMessage');
-    sendMessageViaPubnub(editor.value);
+    var text = editor.value;
+    if (text == "MAGIC MODE") {
+        debug_mode = !debug_mode;
+	logToHistory('Magic mode ON. id=' + me.id + ', color=' + colorFromID(me.id));
+    } else {
+        sendMessageViaPubnub(editor.value);
+    }
     editor.value = "";
     event.preventDefault();
 }
@@ -120,6 +203,7 @@ function onclickPM(target) {
     var editor = document.getElementById('EditMessage');
     sendPrivateMessageViaPubnub(target, editor.value);
     editor.value = "";
+    editor.focus();
 }
 
 function focusEM() {
@@ -150,6 +234,17 @@ function notifyPageTitle(who) {
     document.title = "***PING***";
 }
 
+function logToHistory(text) {
+    if (!debug_mode) return;
+    var p = document.createElement("div");
+        var log = document.createElement("span");
+        log.style.fontStyle = "italic";
+        log.textContent = text;
+        p.appendChild(log);
+    var history = document.getElementById("History");
+    history.appendChild(p);
+}
+
 function addStageDirectionToHistory(message, didWhat) {
     var p = document.createElement("div");
         var entrance = document.createElement("span");
@@ -169,9 +264,9 @@ function addMessageToHistory(message) {
         sender.style.fontStyle = "italic";
         sender.style.color = colorFromID(message.sender.id);
         sender.textContent = message.sender.name;
-        if ('privateTo' in message) {
+        if ('recipient' in message) {
             if (me.Is(message.sender)) {
-                sender.textContent += " (privately to " + message.privateTo.name + ")";
+                sender.textContent += " (privately to " + message.recipient.name + ")";
             } else {
                 sender.textContent += " (privately)";
             }
@@ -183,15 +278,21 @@ function addMessageToHistory(message) {
         sender.style.fontWeight = "bold";
         sender.style.color = colorFromID(message.sender.id);
         sender.textContent = message.sender.name;
-        if ('privateTo' in message) {
+        if ('recipient' in message) {
             if (me.Is(message.sender)) {
-                sender.textContent += " (privately to " + message.privateTo.name + ")";
+                sender.textContent += " (privately to " + message.recipient.name + ")";
             } else {
                 sender.textContent += " (private)";
             }
         }
         sender.textContent += ": ";
         var text = document.createTextNode(message.text);
+	if (message.text.indexOf('\n') >= 0) {
+	    // Format text with embedded newlines as <pre>, since it probably came from a cut-and-paste.
+	    var pre = document.createElement("pre");
+	    pre.appendChild(text);
+	    text = pre;
+	}
         p.appendChild(sender);
         p.appendChild(text);
     }
@@ -200,36 +301,66 @@ function addMessageToHistory(message) {
 }
 
 function receiveMessageViaPubnub(message) {
-    if ('privateTo' in message && me.Isnt(message.privateTo) && me.Isnt(message.sender)) {
-        // gentlemen do not display each other's mail
+    logToHistory('Received normal message:' + JSON.stringify(message));
+
+    if ('recipient' in message && me.Isnt(message.recipient) && me.Isnt(message.sender)) {
+        if ('text' in message) {
+            logToHistory('Got a private message from ' + message.sender.name + ' intended for ' + message.recipient.name + ':');
+            logToHistory(message.text);
+        }
         return;
     }
 
-    if ('enteredTheRoom' in message) {
-        enablePrivateMessaging(message.sender);
-        addStageDirectionToHistory(message, " entered the room.");
-        if (me.Isnt(message.sender)) notifyPageTitle(message);
-    } else if ('leftTheRoom' in message) {
-        disablePrivateMessaging(message.sender);
-        addStageDirectionToHistory(message, " left the room.");
+    if ('secretHandshake' in message) {
+        receiveSecretHandshakeViaPubnub(message);
+    } else if ('stageDirection' in message) {
+        if (message.stageDirection == 'enter') {
+            addStageDirectionToHistory(message, " entered the room.");
+            if (me.Isnt(message.sender)) {
+                notifyPageTitle(message);
+                enablePrivateMessaging(message.sender);
+            }
+        } else if (message.stageDirection == 'exit') {
+            addStageDirectionToHistory(message, " left the room.");
+            if (me.Isnt(message.sender)) {
+                disablePrivateMessaging(message.sender);
+            }
+        }
     } else if ('text' in message) {
-        enablePrivateMessaging(message.sender);
         addMessageToHistory(message);
-        if (me.Isnt(message.sender)) notifyPageTitle(message);
+        if (me.Isnt(message.sender)) {
+            notifyPageTitle(message);
+            enablePrivateMessaging(message.sender);
+        }
     } else {
-        message.text = message.toString();
-        message.sender = {
-            id: '0',
-            name: 'Got a malformed message'
-        };
+        logToHistory('Received a malformed message on the main channel: ' + JSON.stringify(message));
+    }
+}
+
+function receiveSecretMessageViaPubnub(message) {
+    logToHistory('Received secret message:' + JSON.stringify(message));
+
+    if (me.Isnt(message.recipient) && me.Isnt(message.sender)) {
+        logToHistory('Oh bother, this secret message was intended for ' + JSON.stringify(message.recipient));
+        return;
+    }
+
+    if ('text' in message) {
         addMessageToHistory(message);
+        if (me.Isnt(message.sender)) {
+            notifyPageTitle(message);
+	}
+    } else {
+        logToHistory('Received a malformed message on a private channel: ' + JSON.stringify(message));
     }
 }
 
 function enablePrivateMessaging(target) {
-    if (me.Is(target)) return;
+    if (me.IsUninitialized()) return;
     var pmButton = document.getElementById("PM" + target.id);
     if (pmButton == null) {
+        sendSecretHandshakeViaPubnub(target, undefined);
+
         pmButton = document.createElement("input");
         pmButton.type = "button";
         pmButton.id = "PM" + target.id;
@@ -241,11 +372,22 @@ function enablePrivateMessaging(target) {
 }
 
 function disablePrivateMessaging(target) {
-    if (me.Is(target)) return;
+    if (me.IsUninitialized()) return;
     var pmButton = document.getElementById("PM" + target.id);
     if (pmButton != null) {
         var buttons = document.getElementById("PMButtons");
         buttons.removeChild(pmButton);
+    }
+
+    if (target.id in secret_channels) {
+        var secret_channel = secret_channels[target.id];
+        delete secret_channels[target.id];
+        if (typeof secret_channel === 'string') {
+            logToHistory("Unsubscribing from channel " + secret_channel + "...");
+            PUBNUB_demo.unsubscribe({
+                channel: secret_channel
+            });
+        }
     }
 }
 
