@@ -21,8 +21,9 @@ function WavingHands() {
                 right_history: ('X' + Array(this.turnNumber).join('_')).split(''),
                 left_target: null,
                 right_target: null,
-                is_shielded: false,
+                has_counterspell: false,
                 has_mirror: false,
+                is_shielded: false,
                 pending_cure_wounds: 0,
                 was_damaged_this_turn: false,
                 takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
@@ -193,12 +194,13 @@ function WavingHands() {
             }
             spells.sort(function(a,b) {
                 var list = [
+                    'counter-spell',
                     'cure light wounds',
                     'shield', 'magic mirror',
                     'stab', 'missile',
 
                     'summon goblin', 'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
-                    'remove enchantment', 'magic mirror', 'counter-spell', 'dispel magic',
+                    'remove enchantment', 'magic mirror', 'dispel magic',
                     'raise dead', 'cure heavy wounds',
                     'finger of death', 'lightning bolt', 'lightning bolt (one use)',
                     'cause light wounds', 'cause heavy wounds', 'fireball', 'fire storm', 'ice storm',
@@ -295,10 +297,11 @@ function WavingHands() {
         _resetAtEndOfTurn: function() {
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                w.was_damaged_this_turn = false;
-                w.is_shielded = false;
+                w.has_counterspell = false;
                 w.has_mirror = false;
+                w.is_shielded = false;
                 w.pending_cure_wounds = 0;
+                w.was_damaged_this_turn = false;
             }
         },
         _getLeftSpellRegex: function(lspell) {
@@ -375,20 +378,36 @@ function WavingHands() {
             'pp': { name: 'surrender', target: 'self' },
             '!.': { name: 'stab', target: 'opponent' },
         },
+        _effect_counterspell: function(caster, target) {
+            target.has_counterspell = true;
+            return caster.name + ' casts counter-spell on ' + this._himself(caster, target) + '.\n';
+        },
         _effect_curelightwounds: function(caster, target) {
-            target.pending_cure_wounds += 1;
-            return caster.name + ' casts cure light wounds on ' + this._himself(caster, target) + '.\n';
+            if (target.has_counterspell) {
+                return caster.name + ' casts cure light wounds on ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else {
+                target.pending_cure_wounds += 1;
+                return caster.name + ' casts cure light wounds on ' + this._himself(caster, target) + '.\n';
+            }
         },
         _effect_shield: function(caster, target) {
-            target.is_shielded = true;
-            return caster.name + ' casts shield on ' + this._himself(caster, target) + '.\n';
+            if (target.has_counterspell) {
+                return caster.name + ' casts shield on ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else {
+                target.is_shielded = true;
+                return caster.name + ' casts shield on ' + this._himself(caster, target) + '.\n';
+            }
         },
         _effect_magicmirror: function(caster, target) {
-            target.has_mirror = true;
-            return caster.name + ' casts magic mirror on ' + this._himself(caster, target) + '.\n';
+            if (target.has_counterspell) {
+                return caster.name + ' casts magic mirror on ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else {
+                target.has_mirror = true;
+                return caster.name + ' casts magic mirror on ' + this._himself(caster, target) + '.\n';
+            }
         },
         _effect_stab: function(caster, target) {
-            if (target.is_shielded) {
+            if (target.is_shielded || target.has_counterspell) {
                 return caster.name + ' stabs uselessly against ' + target.name + "'s magical shield.\n";
             } else {
                 if (target.pending_cure_wounds >= 1) {
@@ -401,8 +420,10 @@ function WavingHands() {
             }
         },
         _effect_missile: function(caster, target) {
-            if (target.has_mirror && target != caster) {
-                if (caster.is_shielded) {
+            if (target.has_counterspell) {
+                return caster.name + ' hurls a missile at ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else if (target.has_mirror && target != caster) {
+                if (caster.is_shielded || caster.has_counterspell) {
                     return caster.name + "'s missile reflects from " + target.name + "'s magic mirror and is absorbed by " + caster.name + "'s magical shield.\n";
                 } else {
                     if (caster.pending_cure_wounds >= 1) {
