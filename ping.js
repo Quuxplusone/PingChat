@@ -49,7 +49,7 @@ function Ping(name, main_channel) {
                 text: messageText
             });
         },
-        _pubnub: PUBNUB.init({ publish_key: 'demo', subscribe_key: 'demo' }),
+        _pubnub: PUBNUB.init({ publish_key: 'demo', subscribe_key: 'demo', ssl: true }),
         _main_channel: main_channel || 'ping_1287376',
         _secret_channels: {},
         _recently_seen_messages: {},
@@ -64,7 +64,7 @@ function Ping(name, main_channel) {
             msg.callback = function(result) {
                 if (result[0] == 0) {
                     this.onDebug("Retrying publish due to failure condition " + JSON.stringify(result));
-                    window.setTimeout(function() { this._pubnub.publish(msg); }.bind(this), 50);
+                    window.setTimeout(function() { this._pubnub.publish(msg); }.bind(this), 100);
                 } else {
                     then();
                 }
