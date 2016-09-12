@@ -23,6 +23,7 @@ function WavingHands() {
                 right_target: null,
                 has_counterspell: false,
                 has_mirror: false,
+                has_used_lightning_bolt: false,
                 is_shielded: false,
                 pending_cure_wounds: 0,
                 was_damaged_this_turn: false,
@@ -197,12 +198,12 @@ function WavingHands() {
                     'counter-spell',
                     'cure light wounds',
                     'shield', 'magic mirror',
-                    'stab', 'missile',
+                    'stab', 'missile', 'lightning bolt', 'lightning bolt (one use)',
 
                     'summon goblin', 'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
                     'remove enchantment', 'magic mirror', 'dispel magic',
                     'raise dead', 'cure heavy wounds',
-                    'finger of death', 'lightning bolt', 'lightning bolt (one use)',
+                    'finger of death',
                     'cause light wounds', 'cause heavy wounds', 'fireball', 'fire storm', 'ice storm',
                     'amnesia', 'confusion', 'charm person', 'charm monster', 'paralysis', 'fear',
                     'anti-spell', 'protection from evil', 'resist heat', 'resist cold',
@@ -448,6 +449,44 @@ function WavingHands() {
                 }
             }
         },
+        _effect_lightningbolt: function(caster, target) {
+            if (target.has_counterspell) {
+                return caster.name + ' hurls a lightning bolt at ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else if (target.has_mirror && target != caster) {
+                if (caster.has_counterspell) {
+                    return caster.name + "'s lightning bolt reflects from " + target.name + "'s magic mirror and strikes " + caster.name + ". It has no effect.\n";
+                } else {
+                    if (caster.pending_cure_wounds >= 5) {
+                        caster.pending_cure_wounds -= 5;
+                        return caster.name + "'s lightning bolt reflects from " + target.name + "'s magic mirror.\n" +
+                               'The bolt strikes ' + caster.name + ' instead! ' + caster.name + ' looks unharmed.\n';
+                    } else {
+                        var dmg = 5 - caster.pending_cure_wounds;
+                        caster.takeDamage(dmg);
+                        caster.pending_cure_wounds = 0;
+                        return caster.name + "'s lightning bolt reflects from " + target.name + "'s magic mirror.\n" +
+                               'The bolt strikes ' + caster.name + ' for ' + this._points(dmg) + ' of damage instead!\n';
+                    }
+                }
+            } else {
+                if (target.pending_cure_wounds >= 5) {
+                    target.pending_cure_wounds -= 5;
+                    return caster.name + ' hurls a lightning bolt at ' + this._himself(caster, target) + '. ' + target.name + ' looks unharmed.\n';
+                } else {
+                    var dmg = 5 - target.pending_cure_wounds;
+                    target.takeDamage(dmg);
+                    target.pending_cure_wounds = 0;
+                    return caster.name + ' hurls a lightning bolt at ' + this._himself(caster, target) + ' for ' + this._points(dmg) + ' of damage.\n';
+                }
+            }
+        },
+        _effect_lightningboltoneuse: function(caster, target) {
+            if (caster.has_used_lightning_bolt) {
+                return caster.name + ' attempts to hurl a lightning bolt, but has already used up his one lightning bolt for today.\n';
+            }
+            caster.has_used_lightning_bolt = true;
+            return this._effect_lightningbolt(caster, target);
+        },
         _effect_nothinghappens: function(caster, target) {
             return 'Nothing happens. At least, nothing obvious happens.\n';
         },
@@ -457,6 +496,13 @@ function WavingHands() {
             }
             return target.name;
         },
+        _points: function(dmg) {
+            if (dmg == 1) {
+                return '1 point';
+            } else {
+                return dmg + ' points';
+            }
+        }
     };
     waving_hands._initSpellList();
     return waving_hands;
