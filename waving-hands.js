@@ -78,9 +78,25 @@ function WavingHands() {
         _minHP: function(default_value) {
             var result = default_value;
             for (var k in this._wizards) {
-                result = Math.min(result, this._wizards[k].hp);
+                var w = this._wizards[k];
+                result = Math.min(result, w.hp);
             }
             return result;
+        },
+        _maxHPTarget: function(caster, args) {
+            var target = null;
+            if (args.monster) {
+                // No monsters yet. TODO FIXME BUG HACK
+            }
+            if (args.wizard || target == null) {
+                for (var k in this._wizards) {
+                    var w = this._wizards[k];
+                    if (w != caster && (target == null || target.hp > w.hp)) {
+                        target = w;
+                    }
+                }
+            }
+            return target || caster;
         },
         _resolveInvalidOrders: function() {
             for (var k in this._wizards) {
@@ -145,29 +161,43 @@ function WavingHands() {
                 }
             }
         },
+        _resolveUntargetedSpell: function(caster, spell) {
+            switch (spell.default_target) {
+                case 'self':
+                    return caster.name;
+                case 'opponent':
+                    return this._maxHPTarget(caster, {wizard: true, monster: true}).name;
+                case 'wizard':
+                    return this._maxHPTarget(caster, {wizard: true, monster: false}).name;
+                case 'monster':
+                    return this._maxHPTarget(caster, {wizard: false, monster: true}).name;
+            }
+            console.assert(false);
+            return 'oops';
+        },
         _resolveSpellOrdering: function() {
             console.log('resolveSpellOrdering');
             var spells = [];
             for (var k in this._wizards) {
                 var w = this._wizards[k];
                 if (w.left_spell_this_turn) {
-                    var left_target = w.left_spell_this_turn.target(w.name, w.left_target);
+                    var left_target = w.left_target || this._resolveUntargetedSpell(w, w.left_spell_this_turn);
                     spells.push({ caster: w.name, target: left_target, spell: w.left_spell_this_turn });
                 }
                 if (w.right_spell_this_turn) {
-                    var right_target = w.right_spell_this_turn.target(w.name, w.right_target);
+                    var right_target = w.right_target || this._resolveUntargetedSpell(w, w.right_spell_this_turn);
                     spells.push({ caster: w.name, target: right_target, spell: w.right_spell_this_turn });
                 }
             }
             spells.sort(function(a,b) {
                 var list = [
                     'shield',
-                    'stab',
+                    'stab', 'missile',
 
                     'summon goblin', 'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
                     'remove enchantment', 'magic mirror', 'counter-spell', 'dispel magic',
                     'raise dead', 'cure light wounds', 'cure heavy wounds',
-                    'missile', 'finger of death', 'lightning bolt', 'lightning bolt (one use)',
+                    'finger of death', 'lightning bolt', 'lightning bolt (one use)',
                     'cause light wounds', 'cause heavy wounds', 'fireball', 'fire storm', 'ice storm',
                     'amnesia', 'confusion', 'charm person', 'charm monster', 'paralysis', 'fear',
                     'anti-spell', 'protection from evil', 'resist heat', 'resist cold',
@@ -272,20 +302,64 @@ function WavingHands() {
         },
         _initSpellList: function() {
             for (var f in this._spellList) {
-                var name = this._spellList[f];
-                console.assert(typeof name === 'string');
-                var effect = this['_effect_' + name.replace(/[^a-z]/g, '')] || this['_effect_nothinghappens'];
+                var spell = this._spellList[f];
+                var effect = this['_effect_' + spell.name.replace(/[^a-z]/g, '')] || this['_effect_nothinghappens'];
                 this._spellList[f] = {
-                    name: name,
+                    name: spell.name,
                     formula: f,
                     effect: effect.bind(this),
-                    target: function(caster, target) { return target || caster; },  // TODO FIXME BUG HACK
+                    default_target: spell.target,
                 };
             }
         },
+        _spellList: {
+            'p.':       { name: 'shield', target: 'self' },
+            'p.d.w.p.': { name: 'remove enchantment', target: 'opponent' },
+            'ccww':     { name: 'magic mirror', target: 'self' },
+            'w.p.p.':   { name: 'counter-spell', target: 'self' },
+            'w.w.s.':   { name: 'counter-spell', target: 'self' },
+            'ccd.p.w.': { name: 'dispel magic', target: 'self' },
+            'd.w.w.f.w.cc': { name: 'raise dead', target: 'self' },
+            'd.f.w.': { name: 'cure light wounds', target: 'self' },
+            'd.f.p.w.': { name: 'cure heavy wounds', target: 'self' },
+            's.f.w.': { name: 'summon goblin', target: 'opponent' },
+            'p.s.f.w.': { name: 'summon ogre', target: 'opponent' },
+            'f.p.s.f.w.': { name: 'summon troll', target: 'opponent' },
+            'w.f.p.s.f.w.': { name: 'summon giant', target: 'opponent' },
+            'ccs.w.w.s.': { name: 'summon elemental', target: 'self' },
+            's.d.': { name: 'missile', target: 'opponent' },
+            'p.w.p.f.s.s.s.d.': { name: 'finger of death', target: 'opponent' },
+            'd.f.f.d.d.': { name: 'lightning bolt', target: 'opponent' },
+            'w.d.d.cc': { name: 'lightning bolt (one use)', target: 'opponent' },
+            'w.f.p.': { name: 'cause light wounds', target: 'opponent' },
+            'w.p.f.d.': { name: 'cause heavy wounds', target: 'opponent' },
+            'f.s.s.d.d.': { name: 'fireball', target: 'opponent' },
+            's.w.w.cc': { name: 'fire storm', target: 'self' },
+            'w.s.s.cc': { name: 'ice storm', target: 'self' },
+            'd.p.p.': { name: 'amnesia', target: 'wizard' },
+            'd.s.f.': { name: 'confusion', target: 'opponent' },
+            'p.s.d.f.': { name: 'charm person', target: 'other' },
+            'p.s.d.d.': { name: 'charm monster', target: 'monster' },
+            'f.f.f.': { name: 'paralysis', target: 'opponent' },
+            's.w.d.': { name: 'fear', target: 'wizard' },
+            's.p.f.': { name: 'anti-spell', target: 'wizard' },
+            'w.w.p.': { name: 'protection from evil', target: 'self' },
+            'w.w.f.p.': { name: 'resist heat', target: 'self' },
+            's.s.f.p.': { name: 'resist cold', target: 'self' },
+            'd.s.f.f.f.cc': { name: 'disease', target: 'opponent' },
+            'd.w.w.f.w.d.': { name: 'poison', target: 'opponent' },
+            'd.w.f.f.dd': { name: 'blindness', target: 'opponent' },
+            'p.p.wwss': { name: 'invisibility', target: 'self' },
+            'p.w.p.w.w.cc': { name: 'haste', target: 'self' },
+            's.p.p.cc': { name: 'time stop', target: 'self' },
+            'd.w.s.s.s.p.': { name: 'delayed effect', target: 'self' },
+            's.p.f.p.s.d.w.': { name: 'permanency', target: 'self' },
+            'pp': { name: 'surrender', target: 'self' },
+            '!.': { name: 'stab', target: 'opponent' },
+        },
         _effect_shield: function(caster, target) {
             target.is_shielded = true;
-            return caster + ' casts shield on ' + target.name + '.\n';
+            return caster.name + ' casts shield on ' + target.name + '.\n';
         },
         _effect_stab: function(caster, target) {
             if (target.is_shielded) {
@@ -295,53 +369,16 @@ function WavingHands() {
                 return caster.name + ' stabs ' + target.name + ' for 1 point of damage.\n';
             }
         },
+        _effect_missile: function(caster, target) {
+            if (target.is_shielded) {
+                return caster.name + "'s missile bounces off " + target.name + "'s magical shield.\n";
+            } else {
+                target.takeDamage(1);
+                return caster.name + ' hurls a missile at ' + target.name + ' for 1 point of damage.\n';
+            }
+        },
         _effect_nothinghappens: function(caster, target) {
             return 'Nothing happens. At least, nothing obvious happens.\n';
-        },
-        _spellList: {
-            'p.': 'shield',
-            'p.d.w.p.': 'remove enchantment',
-            'ccww': 'magic mirror',
-            'w.p.p.': 'counter-spell',
-            'w.w.s.': 'counter-spell',
-            'ccd.p.w.': 'dispel magic',
-            'd.w.w.f.w.cc': 'raise dead',
-            'd.f.w.': 'cure light wounds',
-            'd.f.p.w.': 'cure heavy wounds',
-            's.f.w.': 'summon goblin',
-            'p.s.f.w.': 'summon ogre',
-            'f.p.s.f.w.': 'summon troll',
-            'w.f.p.s.f.w.': 'summon giant',
-            'ccs.w.w.s.': 'summon elemental',
-            's.d.': 'missile',
-            'p.w.p.f.s.s.s.d.': 'finger of death',
-            'd.f.f.d.d.': 'lightning bolt',
-            'w.d.d.cc': 'lightning bolt (one use)',
-            'w.f.p.': 'cause light wounds',
-            'w.p.f.d.': 'cause heavy wounds',
-            'f.s.s.d.d.': 'fireball',
-            's.w.w.cc': 'fire storm',
-            'w.s.s.cc': 'ice storm',
-            'd.p.p.': 'amnesia',
-            'd.s.f.': 'confusion',
-            'p.s.d.f.': 'charm person',
-            'p.s.d.d.': 'charm monster',
-            'f.f.f.': 'paralysis',
-            's.w.d.': 'fear',
-            's.p.f.': 'anti-spell',
-            'w.w.p.': 'protection from evil',
-            'w.w.f.p.': 'resist heat',
-            's.s.f.p.': 'resist cold',
-            'd.s.f.f.f.cc': 'disease',
-            'd.w.w.f.w.d.': 'poison',
-            'd.w.f.f.dd': 'blindness',
-            'p.p.wwss': 'invisibility',
-            'p.w.p.w.w.cc': 'haste',
-            's.p.p.cc': 'time stop',
-            'd.w.s.s.s.p.': 'delayed effect',
-            's.p.f.p.s.d.w.': 'permanency',
-            'pp': 'surrender',
-            '!.': 'stab',
         },
     };
     waving_hands._initSpellList();

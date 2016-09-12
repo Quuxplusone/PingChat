@@ -36,18 +36,11 @@
 var debug_mode = false;
 var autoscroll_mode = true;
 var waving_hands_referee = null;
-var waving_hands_commands = [];
-var waving_hands_timeout = null;
 var ping = null;
 
 function sendWavingHands(command) {
     console.assert(waving_hands_referee != null);
-    waving_hands_commands.push(command);
-    window.clearTimeout(waving_hands_timeout);
-    waving_hands_timeout = window.setTimeout(function() {
-        ping.sendPrivateMessageTo(waving_hands_referee, waving_hands_commands.join(';'));
-        waving_hands_commands = [];
-    }, 100);
+    ping.sendPrivateMessageTo(waving_hands_referee, command);
     if (command == 'join') {
         unhideWavingHandsButtons({ join: false, play: true });
     }
@@ -263,12 +256,16 @@ function initializePing(my_name) {
         }
     };
     ping.onPrivateMessage = function(me, message) {
-        addMessageToHistory(me, message);
-        if (me.Isnt(message.sender)) {
-            notifyPageTitle(message);
-        }
-        if (message.sender.name == 'Waving Hands Referee' && message.text.startsWith('Sorry,')) {
-            unhideWavingHandsButtons({ join: true, play: false });
+        if (me.Is(message.sender) && message.recipient.name == 'Waving Hands Referee') {
+            // don't show these messages
+        } else {
+            addMessageToHistory(me, message);
+            if (me.Isnt(message.sender)) {
+                notifyPageTitle(message);
+            }
+            if (message.sender.name == 'Waving Hands Referee' && message.text.startsWith('Sorry,')) {
+                unhideWavingHandsButtons({ join: true, play: false });
+            }
         }
     };
     ping.start();
