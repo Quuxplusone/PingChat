@@ -5,7 +5,9 @@
     <body>
         <h1>Waving Hands Referee</h1>
 
-        <div style="position:absolute;right:0;top:0;"><button id="ScrollLock" onclick="onclickSL()">Autoscroll is ON</button></div>
+        <div style="position:fixed;right:0;top:0;">
+            <input type="button" id="ScrollLock" onclick="onclickSL(this)" value="Autoscroll is ON"></input>
+        </div>
 
         <p id="History"></p>
 
@@ -18,10 +20,9 @@ var debug_mode = true;
 var autoscroll_mode = true;
 var ping = null;
 
-function onclickSL() {
+function onclickSL(button) {
     autoscroll_mode = !autoscroll_mode;
-    var scroll_lock_button = document.getElementById('ScrollLock');
-    scroll_lock_button.value = 'Autoscroll is ' + (autoscroll_mode ? 'ON' : 'OFF');
+    button.value = 'Autoscroll is ' + (autoscroll_mode ? 'ON' : 'OFF');
 }
 
 function maybeScrollDown() {
@@ -137,28 +138,29 @@ ping.onEntrance = function(me, message) { addStageDirectionToHistory(message, " 
 ping.onExit = function(me, message) { addStageDirectionToHistory(message, " left the room."); };
 ping.onPublicMessage = function(me, message) {
     addMessageToHistory(me, message);
-    if (message.text == '/wh join') {
-        if (!(message.sender.name in wizards) && waving_hands.addWizard(message.sender.name)) {
-            wizards[message.sender.name] = message.sender;
-            ping.sendPublicMessage(message.sender.name + ' has joined the game of Waving Hands!');
-        } else {
-            ping.sendPublicMessage(message.sender.name + "'s application to Hogwarts was rejected.");
-        }
-    }
 };
 ping.onPrivateMessage = function(me, message) {
     addMessageToHistory(me, message);
-    if (message.text == '/wh join') {
-        if (!(message.sender.name in wizards) && waving_hands.addWizard(message.sender.name)) {
-            wizards[message.sender.name] = message.sender;
-            ping.sendPublicMessage(message.sender.name + ' has joined the game of Waving Hands!');
+    if (me.Is(message.sender)) return;
+    var commands = message.text.split(';');
+    for (var i=0; i < commands.length; ++i) {
+        var command = commands[i];
+        if (command == 'join') {
+            if (!(message.sender.name in wizards) && waving_hands.addWizard(message.sender.name)) {
+                wizards[message.sender.name] = message.sender;
+                ping.sendPublicMessage(message.sender.name + ' has joined the game of Waving Hands!');
+            } else {
+                ping.sendPrivateMessageTo(message.sender, 'Sorry, your application to Hogwarts was rejected.');
+            }
+        } else if (!(message.sender.name in wizards)) {
+            ping.sendPrivateMessageTo(message.sender, "Sorry, you aren't participating in the current game.");
+        } else if (command.match(/^L[fpwsdc!_]$/)) {
+            waving_hands.setLeftAction(message.sender.name, command[1]);
+        } else if (command.match(/^R[fpwsdc!_]$/)) {
+            waving_hands.setRightAction(message.sender.name, command[1]);
         } else {
-            ping.sendPrivateMessage(message.sender, 'Sorry, your application to Hogwarts was rejected.');
+            console.log('Unknown command: ' + command);
         }
-    } else if (message.text.startsWith('/wh l ')) {
-        waving_hands.setLeftAction(message.sender.name, message.text.substring(6,7));
-    } else if (message.text.startsWith('/wh r ')) {
-        waving_hands.setRightAction(message.sender.name, message.text.substring(6,7));
     }
     if (waving_hands.readyToResolve()) {
         resolveThisTurn();
@@ -174,15 +176,17 @@ function resolveThisTurn() {
         logToHistory('Waiting for more wizards to join the game...');
     } else {
         var summary = waving_hands.resolveTurn();
-        ping.sendPublicMessage(summary);
+        if (summary != '') {
+            ping.sendPublicMessage(summary);
+        }
     }
-    impending_resolve = window.setTimeout(resolveThisTurn, 10000);
+    impending_resolve = window.setTimeout(resolveThisTurn, 30000);
 }
 
 ping.start();
 waving_hands.start();
 ping.sendEntrance();
-impending_resolve = setTimeout(resolveThisTurn, 10000);
+impending_resolve = setTimeout(resolveThisTurn, 30000);
 
 </script>
     </body>

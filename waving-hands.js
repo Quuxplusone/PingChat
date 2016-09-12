@@ -1,5 +1,6 @@
 function WavingHands() {
     var waving_hands = {
+        turnNumber: 1,
         start: function() {
             this.turnNumber = 1;
         },
@@ -20,6 +21,9 @@ function WavingHands() {
                 right_history: ('X' + Array(this.turnNumber).join('_')).split(''),
                 left_target: null,
                 right_target: null,
+                is_shielded: false,
+                was_damaged_this_turn: false,
+                takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
             };
             return true;
         },
@@ -32,12 +36,15 @@ function WavingHands() {
             return true;
         },
         resolveTurn: function() {
-            var summary = 'During turn ' + this.turnNumber + '...\n';
+            console.log('resolveTurn ' + this.turnNumber);
+            var summary = '';
             this._resolveInvalidOrders();
             this._resolveCurrentSpells();
             this._resolveSpellOrdering();
+            summary += this._describeGestures();
             summary += this._resolveSpellEffects();
-            // more resolution logic goes here
+            summary += this._describeAftermath();
+            this._resetAtEndOfTurn();
             this.turnNumber += 1;
             for (var k in this._wizards) {
                 var w = this._wizards[k];
@@ -45,7 +52,6 @@ function WavingHands() {
                 w.right_history.unshift('X');
                 console.assert(w.left_history.length === this.turnNumber);
                 console.assert(w.right_history.length === this.turnNumber);
-                console.log('resolveTurn: ' + w.name + ' ' + JSON.stringify(w));
             }
             return summary;
         },
@@ -108,26 +114,31 @@ function WavingHands() {
                 w.left_spell_this_turn = null;
                 w.right_spell_this_turn = null;
                 var bh = this._interleave(w.left_history, w.right_history);
-                for (var f in this._spellList) {
-                    var spell = this._spellList[f];
-                    var lregex = this._getLeftSpellRegex(spell.formula);
-                    var rregex = this._getRightSpellRegex(spell.formula);
-                    if (bh.search(lregex) == 0) {
-                        if (w.left_spell_this_turn && w.left_spell_this_turn.formula.endsWith(spell.formula)) {
-                            // Do nothing; assume the wizard wants to cast the longer spell. TODO FIXME BUG HACK
-                        } else {
-                            w.left_spell_this_turn = spell;
-                        }
-                    }
-                    if (lregex == rregex) {
-                        // Some spells are bilaterally symmetric.
-                        console.assert(spell.name == 'magic mirror' || spell.name == 'surrender');
-                    } else {
-                        if (bh.search(rregex) == 0) {
-                            if (w.right_spell_this_turn && w.right_spell_this_turn.formula.endsWith(spell.formula)) {
+                if (bh.startsWith('pp')) {
+                    // Surrender always takes precedence over shield.
+                    w.left_spell_this_turn = this._spellList['pp'];
+                } else {
+                    for (var f in this._spellList) {
+                        var spell = this._spellList[f];
+                        var lregex = this._getLeftSpellRegex(spell.formula);
+                        var rregex = this._getRightSpellRegex(spell.formula);
+                        if (bh.search(lregex) == 0) {
+                            if (w.left_spell_this_turn && w.left_spell_this_turn.formula.endsWith(spell.formula)) {
                                 // Do nothing; assume the wizard wants to cast the longer spell. TODO FIXME BUG HACK
                             } else {
-                                w.right_spell_this_turn = spell;
+                                w.left_spell_this_turn = spell;
+                            }
+                        }
+                        if (lregex == rregex) {
+                            // Some spells are bilaterally symmetric.
+                            console.assert(spell.name == 'magic mirror' || spell.name == 'surrender');
+                        } else {
+                            if (bh.search(rregex) == 0) {
+                                if (w.right_spell_this_turn && w.right_spell_this_turn.formula.endsWith(spell.formula)) {
+                                    // Do nothing; assume the wizard wants to cast the longer spell. TODO FIXME BUG HACK
+                                } else {
+                                    w.right_spell_this_turn = spell;
+                                }
                             }
                         }
                     }
@@ -149,19 +160,98 @@ function WavingHands() {
                 }
             }
             spells.sort(function(a,b) {
-                return 0;  // TODO FIXME BUG HACK
+                var list = [
+                    'shield',
+                    'stab',
+
+                    'summon goblin', 'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
+                    'remove enchantment', 'magic mirror', 'counter-spell', 'dispel magic',
+                    'raise dead', 'cure light wounds', 'cure heavy wounds',
+                    'missile', 'finger of death', 'lightning bolt', 'lightning bolt (one use)',
+                    'cause light wounds', 'cause heavy wounds', 'fireball', 'fire storm', 'ice storm',
+                    'amnesia', 'confusion', 'charm person', 'charm monster', 'paralysis', 'fear',
+                    'anti-spell', 'protection from evil', 'resist heat', 'resist cold',
+                    'disease', 'poison', 'blindness',
+                    'invisibility', 'haste', 'time stop', 'delayed effect', 'permanency',
+                    'surrender',
+                ];
+                var a_index = list.indexOf(a.name);
+                var b_index = list.indexOf(b.name);
+                return (a_index < b_index) ? -1 : (a_index == b_index) ? 0 : 1;
             });
             this._spellsThisTurn = spells;
+        },
+        _describeGestures: function() {
+            var summary = '';
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.left_history[0] == w.right_history[0]) {
+                    switch (w.left_history[0]) {
+                        case 'c': summary += w.name + ' claps his hands.\n'; break;
+                        case 'f': summary += w.name + ' wiggles the fingers of both hands.\n'; break;
+                        case 'p': summary += w.name + ' proffers both palms in surrender.\n'; break;
+                        case 's': summary += w.name + ' snaps the fingers of both hands.\n'; break;
+                        case 'w': summary += w.name + ' waves both his hands.\n'; break;
+                        case 'd': summary += w.name + ' points with both index fingers.\n'; break;
+                    }
+                } else if (w.left_history[0] != '_' && w.right_history[0] != '_') {
+                    summary += w.name + ' ' + this._describeGesture(w.left_history[0], 'left') + ' and ' + this._describeGesture(w.right_history[0], 'right') + '.\n';
+                } else if (w.left_history[0] != '_') {
+                    summary += w.name + ' ' + this._describeGesture(w.left_history[0], 'left') + '.\n';
+                } else if (w.right_history[0] != '_') {
+                    summary += w.name + ' ' + this._describeGesture(w.right_history[0], 'right') + '.\n';
+                }
+            }
+            console.log('describeGestures ' + summary);
+            return summary;
+        },
+        _describeGesture: function(action, hand) {
+            switch (action) {
+                case '!': return 'stabs with his ' + hand + ' hand';
+                case 'f': return 'wiggles the fingers of his ' + hand + ' hand';
+                case 'p': return 'proffers the palm of his ' + hand + ' hand';
+                case 's': return 'snaps the fingers of his ' + hand + ' hand';
+                case 'w': return 'waves his ' + hand + ' hand';
+                case 'd': return 'points his ' + hand + ' index finger';
+            }
+            return 'oops';
         },
         _resolveSpellEffects: function() {
             console.log('resolveSpellEffects ' + JSON.stringify(this._spellsThisTurn));
             var summary = '';
             for (var i=0; i < this._spellsThisTurn.length; ++i) {
                 var s = this._spellsThisTurn[i];
-                summary += s.caster + ' casts ' + s.spell.name + ' at ' + s.target + '.\n';
-                summary += s.effect(caster, target);
+                var caster = this._wizards[s.caster];
+                console.assert(caster);
+                var target = this._wizards[s.target];
+                if (target) {
+                    summary += s.spell.effect(caster, target);
+                } else {
+                    summary += s.caster + ' casts ' + s.spell.name + ' at nothing in particular.\n';
+                }
             }
             return summary;
+        },
+        _describeAftermath: function() {
+            var summary = '';
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.was_damaged_this_turn) {
+                    if (w.hp <= 0) {
+                        summary += w.name + ' has perished in combat!\n';
+                    } else {
+                        summary += w.name + ' has ' + w.hp + ' points of damage remaining.\n'
+                    }
+                }
+            }
+            return summary;
+        },
+        _resetAtEndOfTurn: function() {
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                w.was_damaged_this_turn = false;
+                w.is_shielded = false;
+            }
         },
         _getLeftSpellRegex: function(lspell) {
             // Given a left-handed spell formula, return a regex that will match an interleaved history
@@ -193,8 +283,20 @@ function WavingHands() {
                 };
             }
         },
-        _effect_nothinghappens: function() {
-            return 'Nothing happens.\n';
+        _effect_shield: function(caster, target) {
+            target.is_shielded = true;
+            return caster + ' casts shield on ' + target.name + '.\n';
+        },
+        _effect_stab: function(caster, target) {
+            if (target.is_shielded) {
+                return caster.name + ' stabs uselessly against ' + target.name + "'s magical shield.\n";
+            } else {
+                target.takeDamage(1);
+                return caster.name + ' stabs ' + target.name + ' for 1 point of damage.\n';
+            }
+        },
+        _effect_nothinghappens: function(caster, target) {
+            return 'Nothing happens. At least, nothing obvious happens.\n';
         },
         _spellList: {
             'p.': 'shield',
