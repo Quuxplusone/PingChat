@@ -22,6 +22,7 @@ function WavingHands() {
                 left_target: null,
                 right_target: null,
                 is_shielded: false,
+                has_mirror: false,
                 was_damaged_this_turn: false,
                 takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
             };
@@ -191,7 +192,7 @@ function WavingHands() {
             }
             spells.sort(function(a,b) {
                 var list = [
-                    'shield',
+                    'shield', 'magic mirror',
                     'stab', 'missile',
 
                     'summon goblin', 'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
@@ -281,6 +282,7 @@ function WavingHands() {
                 var w = this._wizards[k];
                 w.was_damaged_this_turn = false;
                 w.is_shielded = false;
+                w.has_mirror = false;
             }
         },
         _getLeftSpellRegex: function(lspell) {
@@ -359,7 +361,11 @@ function WavingHands() {
         },
         _effect_shield: function(caster, target) {
             target.is_shielded = true;
-            return caster.name + ' casts shield on ' + target.name + '.\n';
+            return caster.name + ' casts shield on ' + this._himself(caster, target) + '.\n';
+        },
+        _effect_magicmirror: function(caster, target) {
+            target.has_mirror = true;
+            return caster.name + ' casts magic mirror on ' + this._himself(caster, target) + '.\n';
         },
         _effect_stab: function(caster, target) {
             if (target.is_shielded) {
@@ -370,8 +376,16 @@ function WavingHands() {
             }
         },
         _effect_missile: function(caster, target) {
-            if (target.is_shielded) {
-                return caster.name + "'s missile bounces off " + target.name + "'s magical shield.\n";
+            if (target.has_mirror) {
+                if (caster.is_shielded) {
+                    return caster.name + "'s missile reflects from " + target.name + "'s magic mirror and is absorbed by " + caster.name + "'s magical shield.\n";
+                } else {
+                    caster.takeDamage(1);
+                    return caster.name + "'s missile reflects from " + target.name + "'s magic mirror.\n" +
+                           'The missile hits ' + caster.name + ' for 1 point of damage instead!\n';
+                }
+            } else if (target.is_shielded) {
+                return caster.name + "'s missile is absorbed by " + target.name + "'s magical shield.\n";
             } else {
                 target.takeDamage(1);
                 return caster.name + ' hurls a missile at ' + target.name + ' for 1 point of damage.\n';
@@ -379,6 +393,12 @@ function WavingHands() {
         },
         _effect_nothinghappens: function(caster, target) {
             return 'Nothing happens. At least, nothing obvious happens.\n';
+        },
+        _himself: function(caster, target) {
+            if (caster.name == target.name) {
+                return 'himself';
+            }
+            return target.name;
         },
     };
     waving_hands._initSpellList();
