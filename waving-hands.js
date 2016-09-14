@@ -1,8 +1,10 @@
 function WavingHands() {
     var waving_hands = {
         turnNumber: 1,
-        start: function() {
+        _newGame: function() {
             this.turnNumber = 1;
+            this.game_over = false;
+            this._wizards = {};
         },
         numberOfWizards: function() {
             return Object.keys(this._wizards).length;
@@ -23,11 +25,13 @@ function WavingHands() {
                 right_target: null,
                 has_counterspell: false,
                 has_mirror: false,
+                has_surrendered: false,
                 has_used_lightning_bolt: false,
                 is_shielded: false,
                 pending_cure_wounds: 0,
                 was_damaged_this_turn: false,
                 takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
+                isStillFighting: function() { return this.hp > 0 && !this.has_surrendered; },
             };
             return true;
         },
@@ -49,13 +53,18 @@ function WavingHands() {
             summary += this._resolveSpellEffects();
             summary += this._describeAftermath();
             this._resetAtEndOfTurn();
-            this.turnNumber += 1;
-            for (var k in this._wizards) {
-                var w = this._wizards[k];
-                w.left_history.unshift('X');
-                w.right_history.unshift('X');
-                console.assert(w.left_history.length === this.turnNumber);
-                console.assert(w.right_history.length === this.turnNumber);
+            summary += this._checkForVictory();
+            if (!this.game_over) {
+                this.turnNumber += 1;
+                for (var k in this._wizards) {
+                    var w = this._wizards[k];
+                    w.left_history.unshift('X');
+                    w.right_history.unshift('X');
+                    console.assert(w.left_history.length === this.turnNumber);
+                    console.assert(w.right_history.length === this.turnNumber);
+                }
+            } else {
+                this._newGame();
             }
             return summary;
         },
@@ -95,8 +104,10 @@ function WavingHands() {
             if (args.wizard || target == null) {
                 for (var k in this._wizards) {
                     var w = this._wizards[k];
-                    if (w != caster && (target == null || target.hp > w.hp)) {
-                        target = w;
+                    if (w != caster && w.isStillFighting()) {
+                        if (target == null || target.hp > w.hp) {
+                            target = w;
+                        }
                     }
                 }
             }
@@ -135,8 +146,7 @@ function WavingHands() {
                 w.right_spell_this_turn = null;
                 var bh = this._interleave(w.left_history, w.right_history);
                 if (bh.startsWith('pp')) {
-                    // Surrender always takes precedence over shield.
-                    w.left_spell_this_turn = this._spellList['pp'];
+                    w.has_surrendered = true;
                 } else {
                     for (var f in this._spellList) {
                         var spell = this._spellList[f];
@@ -151,7 +161,7 @@ function WavingHands() {
                         }
                         if (lregex == rregex) {
                             // Some spells are bilaterally symmetric.
-                            console.assert(spell.name == 'magic mirror' || spell.name == 'surrender');
+                            console.assert(spell.name == 'magic mirror');
                         } else {
                             if (bh.search(rregex) == 0) {
                                 if (w.right_spell_this_turn && w.right_spell_this_turn.formula.endsWith(spell.formula)) {
@@ -209,7 +219,6 @@ function WavingHands() {
                     'anti-spell', 'protection from evil', 'resist heat', 'resist cold',
                     'disease', 'poison', 'blindness',
                     'invisibility', 'haste', 'time stop', 'delayed effect', 'permanency',
-                    'surrender',
                 ];
                 var a_index = list.indexOf(a.spell.name);
                 var b_index = list.indexOf(b.spell.name);
@@ -269,7 +278,7 @@ function WavingHands() {
             }
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                if (w.hp > 0 && w.pending_cure_wounds > 0) {
+                if (w.isStillFighting() && w.pending_cure_wounds > 0) {
                     var regained = Math.min(w.pending_cure_wounds, 14 - w.hp);
                     if (regained) {
                         w.hp += regained;
@@ -285,7 +294,7 @@ function WavingHands() {
             var summary = '';
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                if (w.was_damaged_this_turn) {
+                if (w.was_damaged_this_turn && !w.has_surrendered) {
                     if (w.hp <= 0) {
                         summary += w.name + ' has perished in combat!\n';
                     } else {
@@ -304,6 +313,23 @@ function WavingHands() {
                 w.pending_cure_wounds = 0;
                 w.was_damaged_this_turn = false;
             }
+        },
+        _checkForVictory: function() {
+            var remaining_wizards = [];
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.isStillFighting()) {
+                    remaining_wizards.push(w);
+                }
+            }
+            if (remaining_wizards.length == 0) {
+                this.game_over = true;
+                return 'The battle has ended in mutual defeat.\n';
+            } else if (remaining_wizards.length == 1) {
+                this.game_over = true;
+                return 'The battle has ended and ' + remaining_wizards[0].name + ' is victorious!\n';
+            }
+            return '';
         },
         _getLeftSpellRegex: function(lspell) {
             // Given a left-handed spell formula, return a regex that will match an interleaved history
@@ -376,7 +402,6 @@ function WavingHands() {
             's.p.p.cc': { name: 'time stop', target: 'self' },
             'd.w.s.s.s.p.': { name: 'delayed effect', target: 'self' },
             's.p.f.p.s.d.w.': { name: 'permanency', target: 'self' },
-            'pp': { name: 'surrender', target: 'self' },
             '!.': { name: 'stab', target: 'opponent' },
         },
         _effect_counterspell: function(caster, target) {
@@ -505,5 +530,6 @@ function WavingHands() {
         }
     };
     waving_hands._initSpellList();
+    waving_hands._newGame();
     return waving_hands;
 }

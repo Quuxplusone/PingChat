@@ -172,7 +172,7 @@ var impending_resolve = null;
 function resolveThisTurn() {
     window.clearTimeout(impending_resolve);
     document.title = 'Turn ' + waving_hands.turnNumber;
-    if (waving_hands.numberOfWizards() <= 0) {
+    if (waving_hands.numberOfWizards() <= 1) {
         logToHistory('Waiting for more wizards to join the game...');
     } else {
         var summary = waving_hands.resolveTurn();
@@ -184,7 +184,6 @@ function resolveThisTurn() {
 }
 
 ping.start();
-waving_hands.start();
 ping.sendEntrance();
 impending_resolve = setTimeout(resolveThisTurn, 30000);
 
