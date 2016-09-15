@@ -7,22 +7,30 @@ function WavingHands() {
             this._wizards = {};
         },
         numberOfWizards: function() {
-            return Object.keys(this._wizards).length;
+            var count = 0;
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.species == 'wizard') {
+                    count += 1;
+                }
+            }
+            return count;
         },
         addWizard: function(name) {
             if (name in this._wizards) {
                 return false;  // there's already a wizard by that name in the arena
             }
-            if (this.turnNumber != 1 && this._wizards.length <= 2) {
+            if (this.turnNumber != 1 && this.numberOfWizards() <= 2) {
                 return false;  // only two wizards left; this arena is closed to newcomers
             }
             this._wizards[name] = {
                 name: name,
+                species: 'wizard',
                 hp: this._minHP(14),
                 left_history: ('X' + Array(this.turnNumber).join('_')).split(''),  // the most recent gesture is left_history[0]
                 right_history: ('X' + Array(this.turnNumber).join('_')).split(''),
-                left_target: null,
-                right_target: null,
+                left_targetname: null,
+                right_targetname: null,
                 has_counterspell: false,
                 has_mirror: false,
                 has_surrendered: false,
@@ -35,9 +43,55 @@ function WavingHands() {
             };
             return true;
         },
+        _HPperMonster: function(species) {
+            switch (species) {
+                case 'goblin': return 1;
+                case 'ogre': return 2;
+                case 'troll': return 3;
+                case 'giant': return 4;
+                case 'elemental': return 3;
+            }
+            return null;
+        },
+        _summonMonsterControlledBy: function(controller, species) {
+            while (controller.species != 'wizard') {
+                controller = controller.controller;
+            }
+            var names = [
+                'Addu', 'Amurru', 'Anshar', 'Dagon', 'Eshmun', 'Rammon', 'Rashnu', 'Shamash', 'Utu', 'Zababa', 'Zurvan',
+                'Agassou', 'Acongo', 'Amma', 'Famien', 'Gunab', 'Guruhi', 'Heviosso', 'Kalumba', 'Kokola', 'Kyala',
+                'Mungo', 'Nampa', 'Ogun', 'Ruwa', 'Shango', 'Waka', 'Balor', 'Belenous', 'Lir', 'Midir', 'Apophis',
+                'Auf', 'Hapi', 'Khepera', 'Maahes', 'Menthu', 'Shai', 'Shu', 'Ahto', 'Jumala', 'Naaki', 'Bossu',
+                'Dambala', 'Petro', 'Andvari', 'Bragi', 'Donar', 'Njord',
+            ];
+            var name = names[0];
+            for (var i=0; i < names.length; ++i) {
+                name = names[i];
+                if (name in this._wizards) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            this._wizards[name] = {
+                name: name,
+                species: species,
+                controller: controller,
+                hp: this._HPperMonster(species),
+                targetname: null,
+                has_counterspell: false,
+                has_mirror: false,
+                is_shielded: false,
+                pending_cure_wounds: 0,
+                takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
+                isStillFighting: function() { return this.hp > 0; },
+            };
+            return name;
+        },
         readyToResolve: function() {
             for (var k in this._wizards) {
                 var w = this._wizards[k];
+                if (w.species != 'wizard') continue;
                 if (w.left_history[0] == 'X') return false;
                 if (w.right_history[0] == 'X') return false;
             }
@@ -58,6 +112,7 @@ function WavingHands() {
                 this.turnNumber += 1;
                 for (var k in this._wizards) {
                     var w = this._wizards[k];
+                    if (w.species != 'wizard') continue;
                     w.left_history.unshift('X');
                     w.right_history.unshift('X');
                     console.assert(w.left_history.length === this.turnNumber);
@@ -71,40 +126,56 @@ function WavingHands() {
         setLeftAction: function(name, action) {
             console.log('setLeftAction ' + name + ' ' + action);
             if (!action.match('^[fpwsdc!_]$')) return;
-            this._wizards[name].left_history[0] = action;
+            var w = this._wizards[name];
+            if (w == null || w.species != 'wizard') return;
+            w.left_history[0] = action;
         },
         setRightAction: function(name, action) {
             console.log('setRightAction ' + name + ' ' + action);
             if (!action.match('^[fpwsdc!_]$')) return;
-            this._wizards[name].right_history[0] = action;
+            var w = this._wizards[name];
+            if (w == null || w.species != 'wizard') return;
+            w.right_history[0] = action;
         },
         setLeftTarget: function(name, targetname) {
             console.log('setLeftTarget ' + name + ' ' + targetname);
-            this._wizards[name].left_target = targetname;
+            var w = this._wizards[name];
+            if (w == null || w.species != 'wizard') return;
+            w.left_targetname = targetname;
         },
         setRightTarget: function(name, targetname) {
             console.log('setRightTarget ' + name + ' ' + targetname);
-            this._wizards[name].right_target = targetname;
+            var w = this._wizards[name];
+            if (w == null || w.species != 'wizard') return;
+            w.right_targetname = targetname;
         },
 
-        _wizards: {},
         _minHP: function(default_value) {
             var result = default_value;
             for (var k in this._wizards) {
                 var w = this._wizards[k];
+                if (w.species != 'wizard') continue;
                 result = Math.min(result, w.hp);
             }
             return result;
         },
+        _sameTeam: function(caster, target) {
+            while (caster.species != 'wizard') {
+                caster = caster.controller;
+            }
+            while (target.species != 'wizard') {
+                target = target.controller;
+            }
+            return (caster == target);
+        },
         _maxHPTarget: function(caster, args) {
             var target = null;
-            if (args.monster) {
-                // No monsters yet. TODO FIXME BUG HACK
-            }
-            if (args.wizard || target == null) {
-                for (var k in this._wizards) {
-                    var w = this._wizards[k];
-                    if (w != caster && w.isStillFighting()) {
+            var monster = args.monster || false;
+            var wizard = args.wizard || false;
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if ((wizard && w.species == 'wizard') || (monster && w.species != 'wizard')) {
+                    if (w.isStillFighting() && !this._sameTeam(w, caster)) {
                         if (target == null || target.hp > w.hp) {
                             target = w;
                         }
@@ -116,6 +187,7 @@ function WavingHands() {
         _resolveInvalidOrders: function() {
             for (var k in this._wizards) {
                 var w = this._wizards[k];
+                if (w.species != 'wizard') continue;
                 if (w.left_history[0] == 'X') {
                     w.left_history[0] = '_';  // you snooze, you lose
                 }
@@ -142,6 +214,7 @@ function WavingHands() {
             console.log('resolveCurrentSpells');
             for (var k in this._wizards) {
                 var w = this._wizards[k];
+                if (w.species != 'wizard') continue;
                 w.left_spell_this_turn = null;
                 w.right_spell_this_turn = null;
                 var bh = this._interleave(w.left_history, w.right_history);
@@ -178,29 +251,38 @@ function WavingHands() {
         _resolveUntargetedSpell: function(caster, spell) {
             switch (spell.default_target) {
                 case 'self':
-                    return caster.name;
+                    return caster;
                 case 'opponent':
-                    return this._maxHPTarget(caster, {wizard: true, monster: true}).name;
+                    return this._maxHPTarget(caster, {wizard: true, monster: true});
                 case 'wizard':
-                    return this._maxHPTarget(caster, {wizard: true, monster: false}).name;
+                    return this._maxHPTarget(caster, {wizard: true, monster: false});
                 case 'monster':
-                    return this._maxHPTarget(caster, {wizard: false, monster: true}).name;
+                    return this._maxHPTarget(caster, {wizard: false, monster: true});
             }
             console.assert(false);
             return 'oops';
+        },
+        _resolveTarget: function(targetname) {
+            return null;  // TODO FIXME BUG HACK: how does one name a target who might not even exist yet?
         },
         _resolveSpellOrdering: function() {
             console.log('resolveSpellOrdering');
             var spells = [];
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                if (w.left_spell_this_turn) {
-                    var left_target = w.left_target || this._resolveUntargetedSpell(w, w.left_spell_this_turn);
-                    spells.push({ caster: w.name, target: left_target, spell: w.left_spell_this_turn });
-                }
-                if (w.right_spell_this_turn) {
-                    var right_target = w.right_target || this._resolveUntargetedSpell(w, w.right_spell_this_turn);
-                    spells.push({ caster: w.name, target: right_target, spell: w.right_spell_this_turn });
+                if (w.species == 'wizard') {
+                    if (w.left_spell_this_turn) {
+                        var left_target = this._resolveTarget(w.left_targetname) || this._resolveUntargetedSpell(w, w.left_spell_this_turn);
+                        spells.push({ caster: w, target: left_target, spell: w.left_spell_this_turn });
+                    }
+                    if (w.right_spell_this_turn) {
+                        var right_target = this._resolveTarget(w.right_targetname) || this._resolveUntargetedSpell(w, w.right_spell_this_turn);
+                        spells.push({ caster: w, target: right_target, spell: w.right_spell_this_turn });
+                    }
+                } else {
+                    var spell = { name: 'monster_attack', default_target: 'opponent', effect: this._effect_monster_attack.bind(this) };
+                    var target = this._resolveTarget(w.targetname) || this._resolveUntargetedSpell(w, spell);
+                    spells.push({ caster: w, target: target, spell: spell });
                 }
             }
             spells.sort(function(a,b) {
@@ -208,9 +290,9 @@ function WavingHands() {
                     'counter-spell',
                     'cure light wounds',
                     'shield', 'magic mirror',
-                    'stab', 'missile', 'lightning bolt', 'lightning bolt (one use)',
+                    'summon goblin', 'monster_attack', 'stab', 'missile', 'lightning bolt', 'lightning bolt (one use)',
 
-                    'summon goblin', 'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
+                    'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
                     'remove enchantment', 'magic mirror', 'dispel magic',
                     'raise dead', 'cure heavy wounds',
                     'finger of death',
@@ -231,6 +313,7 @@ function WavingHands() {
             var summary = '';
             for (var k in this._wizards) {
                 var w = this._wizards[k];
+                if (w.species != 'wizard') continue;
                 if (w.left_history[0] == w.right_history[0]) {
                     switch (w.left_history[0]) {
                         case 'c': summary += w.name + ' claps his hands.\n'; break;
@@ -267,11 +350,8 @@ function WavingHands() {
             var summary = '';
             for (var i=0; i < this._spellsThisTurn.length; ++i) {
                 var s = this._spellsThisTurn[i];
-                var caster = this._wizards[s.caster];
-                console.assert(caster);
-                var target = this._wizards[s.target];
-                if (target) {
-                    summary += s.spell.effect(caster, target);
+                if (s.target) {
+                    summary += s.spell.effect(s.caster, s.target);
                 } else {
                     summary += s.caster + ' casts ' + s.spell.name + ' at nothing in particular.\n';
                 }
@@ -296,9 +376,9 @@ function WavingHands() {
                 var w = this._wizards[k];
                 if (w.was_damaged_this_turn && !w.has_surrendered) {
                     if (w.hp <= 0) {
-                        summary += w.name + ' has perished in combat!\n';
+                        summary += w.name + ' has ' + (w.species == 'wizard' ? 'perished in combat' : 'been killed') + '!\n';
                     } else {
-                        summary += w.name + ' has ' + w.hp + ' points of damage remaining.\n'
+                        summary += w.name + ' has ' + this._points(w.hp) + ' of damage remaining.\n'
                     }
                 }
             }
@@ -318,7 +398,7 @@ function WavingHands() {
             var remaining_wizards = [];
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                if (w.isStillFighting()) {
+                if (w.species == 'wizard' && w.isStillFighting()) {
                     remaining_wizards.push(w);
                 }
             }
@@ -370,10 +450,10 @@ function WavingHands() {
             'd.w.w.f.w.cc': { name: 'raise dead', target: 'self' },
             'd.f.w.': { name: 'cure light wounds', target: 'self' },
             'd.f.p.w.': { name: 'cure heavy wounds', target: 'self' },
-            's.f.w.': { name: 'summon goblin', target: 'opponent' },
-            'p.s.f.w.': { name: 'summon ogre', target: 'opponent' },
-            'f.p.s.f.w.': { name: 'summon troll', target: 'opponent' },
-            'w.f.p.s.f.w.': { name: 'summon giant', target: 'opponent' },
+            's.f.w.': { name: 'summon goblin', target: 'self' },
+            'p.s.f.w.': { name: 'summon ogre', target: 'self' },
+            'f.p.s.f.w.': { name: 'summon troll', target: 'self' },
+            'w.f.p.s.f.w.': { name: 'summon giant', target: 'self' },
             'ccs.w.w.s.': { name: 'summon elemental', target: 'self' },
             's.d.': { name: 'missile', target: 'opponent' },
             'p.w.p.f.s.s.s.d.': { name: 'finger of death', target: 'opponent' },
@@ -432,6 +512,47 @@ function WavingHands() {
                 return caster.name + ' casts magic mirror on ' + this._himself(caster, target) + '.\n';
             }
         },
+        _effect_summongoblin: function(caster, target) {
+            if (target.has_counterspell) {
+                return caster.name + ' casts summon goblin at ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else if (target.has_mirror && target != caster) {
+                if (caster.has_mirror) {
+                    return "For a brief moment, " + caster.name + "'s summon goblin spell reflects infinitely between " + target.name + "'s magic mirror and his own; then it attenuates to nothing.\n";
+                } else if (caster.has_counterspell) {
+                    return caster.name + "'s summon goblin spell reflects from " + target.name + "'s magic mirror back toward " + caster.name + ". It has no effect.\n";
+                } else {
+                    var goblinName = this._summonMonsterControlledBy(target, 'goblin');
+                    return caster.name + "'s summon goblin spell reflects from " + target.name + "'s magic mirror.\n" +
+                        "A goblin named " + goblinName + " appears in the arena!\n";
+                }
+            } else {
+                var goblinName = this._summonMonsterControlledBy(target, 'goblin');
+                return caster.name + ' casts summon goblin at ' + this._himself(caster, target) + '.\n' +
+                    "A goblin named " + goblinName + " appears in the arena!\n";
+            }
+        },
+        _effect_monster_attack: function(caster, target) {
+            var dmg;
+            switch (caster.species) {
+                case 'goblin': dmg = 1; break;
+                case 'ogre': dmg = 2; break;
+                case 'troll': dmg = 3; break;
+                case 'giant': dmg = 4; break;
+            }
+            if (target.is_shielded || target.has_counterspell) {
+                return caster.name + ' launches himself uselessly against ' + target.name + "'s magical shield.\n";
+            } else {
+                if (target.pending_cure_wounds >= dmg) {
+                    target.pending_cure_wounds -= dmg;
+                    return caster.name + " attacks " + target.name + '. ' + target.name + ' looks unharmed.\n';
+                } else {
+                    dmg -= target.pending_cure_wounds;
+                    target.takeDamage(dmg);
+                    target.pending_cure_wounds = 0;
+                    return caster.name + " attacks " + target.name + ' for ' + this._points(dmg) + ' of damage.\n';
+                }
+            }
+        },
         _effect_stab: function(caster, target) {
             if (target.is_shielded || target.has_counterspell) {
                 return caster.name + ' stabs uselessly against ' + target.name + "'s magical shield.\n";
@@ -449,7 +570,9 @@ function WavingHands() {
             if (target.has_counterspell) {
                 return caster.name + ' hurls a missile at ' + this._himself(caster, target) + '. It has no effect.\n';
             } else if (target.has_mirror && target != caster) {
-                if (caster.is_shielded || caster.has_counterspell) {
+                if (caster.has_mirror) {
+                    return "For a brief moment, " + caster.name + "'s missile spell reflects infinitely between " + target.name + "'s magic mirror and his own; then it attenuates to nothing.\n";
+                } else if (caster.is_shielded || caster.has_counterspell) {
                     return caster.name + "'s missile reflects from " + target.name + "'s magic mirror and is absorbed by " + caster.name + "'s magical shield.\n";
                 } else {
                     if (caster.pending_cure_wounds >= 1) {
@@ -478,7 +601,9 @@ function WavingHands() {
             if (target.has_counterspell) {
                 return caster.name + ' hurls a lightning bolt at ' + this._himself(caster, target) + '. It has no effect.\n';
             } else if (target.has_mirror && target != caster) {
-                if (caster.has_counterspell) {
+                if (caster.has_mirror) {
+                    return "For a brief moment, " + caster.name + "'s lightning bolt reflects infinitely between " + target.name + "'s magic mirror and his own; then it attenuates to nothing.\n";
+                } else if (caster.has_counterspell) {
                     return caster.name + "'s lightning bolt reflects from " + target.name + "'s magic mirror and strikes " + caster.name + ". It has no effect.\n";
                 } else {
                     if (caster.pending_cure_wounds >= 5) {
