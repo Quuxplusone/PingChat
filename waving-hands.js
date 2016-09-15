@@ -35,7 +35,7 @@ function WavingHands() {
                 has_mirror: false,
                 has_surrendered: false,
                 has_used_lightning_bolt: false,
-                is_shielded: false,
+                is_shielded: 0,
                 pending_cure_wounds: 0,
                 was_damaged_this_turn: false,
                 takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
@@ -81,7 +81,7 @@ function WavingHands() {
                 targetname: null,
                 has_counterspell: false,
                 has_mirror: false,
-                is_shielded: false,
+                is_shielded: 0,
                 pending_cure_wounds: 0,
                 takeDamage: function(dmg) { this.hp -= dmg; this.was_damaged_this_turn = true; },
                 isStillFighting: function() { return this.hp > 0; },
@@ -289,7 +289,7 @@ function WavingHands() {
                 var list = [
                     'counter-spell',
                     'cure light wounds',
-                    'shield', 'magic mirror',
+                    'protection from evil', 'shield', 'magic mirror',
                     'summon goblin', 'monster_attack', 'stab', 'missile', 'lightning bolt', 'lightning bolt (one use)',
 
                     'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
@@ -298,7 +298,7 @@ function WavingHands() {
                     'finger of death',
                     'cause light wounds', 'cause heavy wounds', 'fireball', 'fire storm', 'ice storm',
                     'amnesia', 'confusion', 'charm person', 'charm monster', 'paralysis', 'fear',
-                    'anti-spell', 'protection from evil', 'resist heat', 'resist cold',
+                    'anti-spell', 'resist heat', 'resist cold',
                     'disease', 'poison', 'blindness',
                     'invisibility', 'haste', 'time stop', 'delayed effect', 'permanency',
                 ];
@@ -389,7 +389,7 @@ function WavingHands() {
                 var w = this._wizards[k];
                 w.has_counterspell = false;
                 w.has_mirror = false;
-                w.is_shielded = false;
+                w.is_shielded = Math.max(0, w.is_shielded - 1);
                 w.pending_cure_wounds = 0;
                 w.was_damaged_this_turn = false;
             }
@@ -496,11 +496,19 @@ function WavingHands() {
                 return caster.name + ' casts cure light wounds on ' + this._himself(caster, target) + '.\n';
             }
         },
+        _effect_protectionfromevil: function(caster, target) {
+            if (target.has_counterspell) {
+                return caster.name + ' casts protection from evil on ' + this._himself(caster, target) + '. It has no effect.\n';
+            } else {
+                target.is_shielded = Math.max(target.is_shielded, 4);
+                return caster.name + ' casts protection from evil on ' + this._himself(caster, target) + '.\n';
+            }
+        },
         _effect_shield: function(caster, target) {
             if (target.has_counterspell) {
                 return caster.name + ' casts shield on ' + this._himself(caster, target) + '. It has no effect.\n';
             } else {
-                target.is_shielded = true;
+                target.is_shielded = Math.max(target.is_shielded, 1);
                 return caster.name + ' casts shield on ' + this._himself(caster, target) + '.\n';
             }
         },
