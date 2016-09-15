@@ -290,9 +290,10 @@ function WavingHands() {
                     'counter-spell',
                     'cure light wounds',
                     'protection from evil', 'shield', 'magic mirror',
-                    'summon goblin', 'monster_attack', 'stab', 'missile', 'lightning bolt', 'lightning bolt (one use)',
+                    'summon goblin', 'summon ogre', 'summon troll', 'summon giant',
+                    'monster_attack', 'stab', 'missile', 'lightning bolt', 'lightning bolt (one use)',
 
-                    'summon ogre', 'summon troll', 'summon giant', 'summon elemental',
+                    'summon elemental',
                     'remove enchantment', 'magic mirror', 'dispel magic',
                     'raise dead', 'cure heavy wounds',
                     'finger of death',
@@ -520,24 +521,36 @@ function WavingHands() {
                 return caster.name + ' casts magic mirror on ' + this._himself(caster, target) + '.\n';
             }
         },
-        _effect_summongoblin: function(caster, target) {
+        _effect_summonmonster: function(caster, target, species) {
             if (target.has_counterspell) {
-                return caster.name + ' casts summon goblin at ' + this._himself(caster, target) + '. It has no effect.\n';
+                return caster.name + ' casts summon ' + species + ' at ' + this._himself(caster, target) + '. It has no effect.\n';
             } else if (target.has_mirror && target != caster) {
                 if (caster.has_mirror) {
-                    return "For a brief moment, " + caster.name + "'s summon goblin spell reflects infinitely between " + target.name + "'s magic mirror and his own; then it attenuates to nothing.\n";
+                    return 'For a brief moment, ' + caster.name + "'s summon " + species + ' spell reflects infinitely between ' + target.name + "'s magic mirror and his own; then it attenuates to nothing.\n";
                 } else if (caster.has_counterspell) {
-                    return caster.name + "'s summon goblin spell reflects from " + target.name + "'s magic mirror back toward " + caster.name + ". It has no effect.\n";
+                    return caster.name + "'s summon " + species + ' spell reflects from ' + target.name + "'s magic mirror back toward " + caster.name + '. It has no effect.\n';
                 } else {
-                    var goblinName = this._summonMonsterControlledBy(target, 'goblin');
-                    return caster.name + "'s summon goblin spell reflects from " + target.name + "'s magic mirror.\n" +
-                        "A goblin named " + goblinName + " appears in the arena!\n";
+                    var monsterName = this._summonMonsterControlledBy(target, species);
+                    return caster.name + "'s summon " + species + ' spell reflects from ' + target.name + "'s magic mirror.\n" +
+                        'A ' + species + ' named ' + monsterName + ' appears in the arena!\n';
                 }
             } else {
-                var goblinName = this._summonMonsterControlledBy(target, 'goblin');
-                return caster.name + ' casts summon goblin at ' + this._himself(caster, target) + '.\n' +
-                    "A goblin named " + goblinName + " appears in the arena!\n";
+                var monsterName = this._summonMonsterControlledBy(target, species);
+                return caster.name + ' casts summon ' + species + ' at ' + this._himself(caster, target) + '.\n' +
+                    'A ' + species + ' named ' + monsterName + ' appears in the arena!\n';
             }
+        },
+        _effect_summongoblin: function(caster, target) {
+            return this._effect_summonmonster(caster, target, 'goblin');
+        },
+        _effect_summonogre: function(caster, target) {
+            return this._effect_summonmonster(caster, target, 'ogre');
+        },
+        _effect_summontroll: function(caster, target) {
+            return this._effect_summonmonster(caster, target, 'troll');
+        },
+        _effect_summongiant: function(caster, target) {
+            return this._effect_summonmonster(caster, target, 'giant');
         },
         _effect_monster_attack: function(caster, target) {
             var dmg;
