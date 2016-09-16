@@ -27,8 +27,8 @@ function WavingHands() {
                 name: name,
                 species: 'wizard',
                 hp: this._minHP(14),
-                left_history: ('X' + Array(this.turnNumber).join('_')).split(''),  // the most recent gesture is left_history[0]
-                right_history: ('X' + Array(this.turnNumber).join('_')).split(''),
+                left_history: Array(this.turnNumber + 1).join('X').split(''),  // the most recent gesture is left_history[0]
+                right_history: Array(this.turnNumber + 1).join('X').split(''),
                 left_targetname: null,
                 right_targetname: null,
                 has_counterspell: false,
@@ -188,10 +188,10 @@ function WavingHands() {
             for (var k in this._wizards) {
                 var w = this._wizards[k];
                 if (w.species != 'wizard') continue;
-                if (w.left_history[0] == 'X') {
+                if (w.left_history[0] == 'X' && w.right_history[0] != 'X') {
                     w.left_history[0] = '_';  // you snooze, you lose
                 }
-                if (w.right_history[0] == 'X') {
+                if (w.right_history[0] == 'X' && w.left_history[0] != 'X') {
                     w.right_history[0] = '_';  // you snooze, you lose
                 }
                 if (
@@ -324,11 +324,11 @@ function WavingHands() {
                         case 'w': summary += w.name + ' waves both his hands.\n'; break;
                         case 'd': summary += w.name + ' points with both index fingers.\n'; break;
                     }
-                } else if (w.left_history[0] != '_' && w.right_history[0] != '_') {
+                } else if (w.left_history[0].match('^[fpwsdc!]$') && w.right_history[0].match('^[fpwsdc!]$')) {
                     summary += w.name + ' ' + this._describeGesture(w.left_history[0], 'left') + ' and ' + this._describeGesture(w.right_history[0], 'right') + '.\n';
-                } else if (w.left_history[0] != '_') {
+                } else if (w.left_history[0].match('^[fpwsdc!]$')) {
                     summary += w.name + ' ' + this._describeGesture(w.left_history[0], 'left') + '.\n';
-                } else if (w.right_history[0] != '_') {
+                } else if (w.right_history[0].match('^[fpwsdc!]$')) {
                     summary += w.name + ' ' + this._describeGesture(w.right_history[0], 'right') + '.\n';
                 }
             }
@@ -417,14 +417,14 @@ function WavingHands() {
             // ending with that spell on the left hand. E.g., given "w.w.s.", return "^s.w.w..*$".
             // For user-friendliness we allow missed turns, i.e. the regex actually returned
             // for "w.w.s." is "^s.(__)*w.(__)*w..*$". This is AGAINST the official rules of Waving Hands!
-            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(__)*'); }
+            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(XX)*'); }
             var rev = function(s) { return s.split('').reverse().join(''); };
             return '^' + allow_missed_turns(rev(lspell)) + '.*$';
         },
         _getRightSpellRegex: function(lspell) {
             // Given a left-handed spell formula, return a regex that will match an interleaved history
             // ending with that spell on the right hand.
-            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(__)*'); }
+            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(XX)*'); }
             var rev = function(s) { return s.split('').reverse().join(''); };
             var rspell = lspell.match(/(..)/g).map(rev).join('');
             return '^' + allow_missed_turns(rev(rspell)) + '.*$';
