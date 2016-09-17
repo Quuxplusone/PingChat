@@ -134,7 +134,7 @@ function WavingHands() {
             var summary = '';
             this._resolveSpellOrdering();
             summary += this._describeGestures();
-            summary += this._resolveSpellEffects();
+            summary += this._applyAndDescribeSpellEffects();
             summary += this._describeAftermath();
             this._resetAtEndOfTurn();
             summary += this._checkForVictory();
@@ -354,6 +354,17 @@ function WavingHands() {
             this._spellsThisTurn = spells;
         },
         _describeGestures: function() {
+            var describeGesture = function(gesture, hand) {
+                switch (gesture) {
+                    case '!': return 'stabs with his ' + hand + ' hand';
+                    case 'f': return 'wiggles the fingers of his ' + hand + ' hand';
+                    case 'p': return 'proffers the palm of his ' + hand + ' hand';
+                    case 's': return 'snaps the fingers of his ' + hand + ' hand';
+                    case 'w': return 'waves his ' + hand + ' hand';
+                    case 'd': return 'points his ' + hand + ' index finger';
+                }
+                return 'oops';
+            };
             var summary = '';
             for (var k in this._wizards) {
                 var w = this._wizards[k];
@@ -368,35 +379,23 @@ function WavingHands() {
                         case 'd': summary += w.name + ' points with both index fingers.\n'; break;
                     }
                 } else if (w.left_history[0].match('^[fpwsdc!]$') && w.right_history[0].match('^[fpwsdc!]$')) {
-                    summary += w.name + ' ' + this._describeGesture(w.left_history[0], 'left') + ' and ' + this._describeGesture(w.right_history[0], 'right') + '.\n';
+                    summary += w.name + ' ' + describeGesture(w.left_history[0], 'left') + ' and ' + describeGesture(w.right_history[0], 'right') + '.\n';
                 } else if (w.left_history[0].match('^[fpwsdc!]$')) {
-                    summary += w.name + ' ' + this._describeGesture(w.left_history[0], 'left') + '.\n';
+                    summary += w.name + ' ' + describeGesture(w.left_history[0], 'left') + '.\n';
                 } else if (w.right_history[0].match('^[fpwsdc!]$')) {
-                    summary += w.name + ' ' + this._describeGesture(w.right_history[0], 'right') + '.\n';
+                    summary += w.name + ' ' + describeGesture(w.right_history[0], 'right') + '.\n';
                 }
             }
-            console.log('describeGestures ' + summary);
             return summary;
         },
-        _describeGesture: function(gesture, hand) {
-            switch (gesture) {
-                case '!': return 'stabs with his ' + hand + ' hand';
-                case 'f': return 'wiggles the fingers of his ' + hand + ' hand';
-                case 'p': return 'proffers the palm of his ' + hand + ' hand';
-                case 's': return 'snaps the fingers of his ' + hand + ' hand';
-                case 'w': return 'waves his ' + hand + ' hand';
-                case 'd': return 'points his ' + hand + ' index finger';
-            }
-            return 'oops';
-        },
-        _resolveSpellEffects: function() {
+        _applyAndDescribeSpellEffects: function() {
             var summary = '';
             for (var i=0; i < this._spellsThisTurn.length; ++i) {
                 var s = this._spellsThisTurn[i];
                 if (s.target) {
                     summary += s.spell.effect(s.caster, s.target);
                 } else {
-                    summary += s.caster + ' casts ' + s.spell.name + ' at nothing in particular.\n';
+                    summary += s.caster.name + ' casts ' + s.spell.name + ' at nothing in particular.\n';
                 }
             }
             for (var k in this._wizards) {
