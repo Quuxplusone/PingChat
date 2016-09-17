@@ -156,7 +156,7 @@ waving_hands.onPossibleSpells = function(wizname, possibilities, callback) {
                 var index = +message.text;
                 if (1 <= index && index <= possibilities.length) {
                     window.clearTimeout(choiceTimeout);
-                    selectChoice(index);
+                    selectChoice(index - 1);
                 } else {
                     ping.sendPrivateMessageTo(wizards[wizname], '"' + index + '" was not one of the options.');
                 }
