@@ -27,10 +27,8 @@ function WavingHands() {
                 name: name,
                 species: 'wizard',
                 hp: this._minHP(14),
-                left_history: Array(this.turnNumber + 1).join('X').split(''),  // the most recent gesture is left_history[0]
-                right_history: Array(this.turnNumber + 1).join('X').split(''),
-                left_targetname: null,
-                right_targetname: null,
+                left_history: ['X'],  // the most recent gesture is left_history[0]
+                right_history: ['X'],
                 has_counterspell: false,
                 has_mirror: false,
                 has_surrendered: false,
@@ -79,7 +77,6 @@ function WavingHands() {
                 species: species,
                 controller: controller,
                 hp: this._HPperMonster(species),
-                targetname: null,
                 has_counterspell: false,
                 has_mirror: false,
                 is_shielded: 0,
@@ -311,9 +308,6 @@ function WavingHands() {
             console.assert(false);
             return 'oops';
         },
-        _resolveTarget: function(targetname) {
-            return null;  // TODO FIXME BUG HACK: how does one name a target who might not even exist yet?
-        },
         _resolveSpellOrdering: function() {
             console.log('resolveSpellOrdering');
             var spells = [];
@@ -321,16 +315,16 @@ function WavingHands() {
                 var w = this._wizards[k];
                 if (w.species == 'wizard') {
                     if (w.left_spell_this_turn) {
-                        var left_target = this._resolveTarget(w.left_targetname) || this._resolveUntargetedSpell(w, w.left_spell_this_turn);
+                        var left_target = this._resolveUntargetedSpell(w, w.left_spell_this_turn);
                         spells.push({ caster: w, target: left_target, spell: w.left_spell_this_turn });
                     }
                     if (w.right_spell_this_turn) {
-                        var right_target = this._resolveTarget(w.right_targetname) || this._resolveUntargetedSpell(w, w.right_spell_this_turn);
+                        var right_target = this._resolveUntargetedSpell(w, w.right_spell_this_turn);
                         spells.push({ caster: w, target: right_target, spell: w.right_spell_this_turn });
                     }
                 } else {
                     var spell = { name: 'monster_attack', default_target: 'opponent', effect: this._effect_monster_attack.bind(this) };
-                    var target = this._resolveTarget(w.targetname) || this._resolveUntargetedSpell(w, spell);
+                    var target = this._resolveUntargetedSpell(w, spell);
                     spells.push({ caster: w, target: target, spell: spell });
                 }
             }
