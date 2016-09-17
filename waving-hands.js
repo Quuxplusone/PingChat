@@ -136,8 +136,8 @@ function WavingHands() {
             summary += this._describeGestures();
             summary += this._applyAndDescribeSpellEffects();
             summary += this._describeAftermath();
-            this._resetAtEndOfTurn();
             summary += this._checkForVictory();
+            this._resetAtEndOfTurn();
             if (!this.game_over) {
                 this.turnNumber += 1;
                 for (var k in this._wizards) {
@@ -426,6 +426,36 @@ function WavingHands() {
             }
             return summary;
         },
+        _checkForVictory: function() {
+            var remaining_wizards = [];
+            var surrendering_but_surviving_wizards = [];
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.species == 'wizard' && w.isStillFighting()) {
+                    if (w.is_surrendering && w.hp > 0) {
+                        surrendering_but_surviving_wizards.push(w);
+                    } else {
+                        remaining_wizards.push(w);
+                    }
+                }
+            }
+            if (remaining_wizards.length == 1) {
+                this.game_over = true;
+                return 'The battle has ended and ' + remaining_wizards[0].name + ' is victorious!\n';
+            } else if (remaining_wizards.length == 0 && surrendering_but_surviving_wizards.length == 1) {
+                this.game_over = true;
+                return 'The battle has ended; sole survivor ' + surrendering_but_surviving_wizards[0].name + ' puts down his hands and claims victory.\n';
+            } else if (remaining_wizards.length == 0) {
+                this.game_over = true;
+                if (surrendering_but_surviving_wizards.length > 1) {
+                    return 'The battle has ended in mutual surrender.\n';
+                } else {
+                    return 'The battle has ended in mutual defeat.\n';
+                }
+            } else {
+                return '';
+            }
+        },
         _resetAtEndOfTurn: function() {
             for (var k in this._wizards) {
                 var w = this._wizards[k];
@@ -438,23 +468,6 @@ function WavingHands() {
                 w.pending_cure_wounds = 0;
                 w.was_damaged_this_turn = false;
             }
-        },
-        _checkForVictory: function() {
-            var remaining_wizards = [];
-            for (var k in this._wizards) {
-                var w = this._wizards[k];
-                if (w.species == 'wizard' && w.isStillFighting()) {
-                    remaining_wizards.push(w);
-                }
-            }
-            if (remaining_wizards.length == 0) {
-                this.game_over = true;
-                return 'The battle has ended in mutual defeat.\n';
-            } else if (remaining_wizards.length == 1) {
-                this.game_over = true;
-                return 'The battle has ended and ' + remaining_wizards[0].name + ' is victorious!\n';
-            }
-            return '';
         },
         _getLeftSpellRegex: function(lspell) {
             // Given a left-handed spell formula, return a regex that will match an interleaved history
