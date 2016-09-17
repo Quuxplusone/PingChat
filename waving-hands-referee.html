@@ -129,9 +129,45 @@ function addMessageToHistory(me, message) {
 }
 
 var wizards = {};  // map from name to Ping-recipient
+var privateMessageHandlers = {};  // map from name to handler
 
 var ping = Ping('Waving Hands Referee');
 var waving_hands = WavingHands();
+
+waving_hands.onPossibleSpells = function(wizname, possibilities, callback) {
+    console.log(possibilities);
+    var selectChoice = function(wizname, callback, index) {
+        privateMessageHandlers[wizname] = null; // unregister me
+        callback(index);
+        if (waving_hands.readyToResolveSpellEffects()) {
+            window.setTimeout(resolveAndReportSpellEffects, 0);
+        }
+    }.bind(null, wizname, callback);
+    if (possibilities.length == 1) {
+        selectChoice(0);
+    } else {
+        var message_text = "You have ten seconds to choose one of the following options (otherwise I'll assume you want the first one):\n";
+        for (var i = 0; i < possibilities.length; ++i) {
+            message_text += (i+1) + ') ' + possibilities[i].text + '\n';
+        }
+        var choiceTimeout = window.setTimeout(selectChoice, 10000, 0);
+        privateMessageHandlers[wizname] = function(me, message) {
+            if (message.text.match(/^[0-9]+$/)) {
+                var index = +message.text;
+                if (1 <= index && index <= possibilities.length) {
+                    window.clearTimeout(choiceTimeout);
+                    selectChoice(index);
+                } else {
+                    ping.sendPrivateMessageTo(wizards[wizname], '"' + index + '" was not one of the options.');
+                }
+            } else {
+                ping.sendPrivateMessageTo(wizards[wizname], 'Please choose one of the above numbers.');
+            }
+            return true; // don't process any other kind of command from this user right now
+        };
+        ping.sendPrivateMessageTo(wizards[wizname], message_text);
+    }
+};
 
 ping.onDebug = logToHistory;
 ping.onEntrance = function(me, message) { addStageDirectionToHistory(message, " entered the room."); };
@@ -142,6 +178,10 @@ ping.onPublicMessage = function(me, message) {
 ping.onPrivateMessage = function(me, message) {
     addMessageToHistory(me, message);
     if (me.Is(message.sender)) return;
+    if (privateMessageHandlers[message.sender.name]) {
+        var done = privateMessageHandlers[message.sender.name](me, message);
+        if (done) return;
+    }
     var commands = message.text.split(';');
     for (var i=0; i < commands.length; ++i) {
         var command = commands[i];
@@ -155,14 +195,14 @@ ping.onPrivateMessage = function(me, message) {
         } else if (!(message.sender.name in wizards)) {
             ping.sendPrivateMessageTo(message.sender, "Sorry, you aren't participating in the current game.");
         } else if (command.match(/^L[fpwsdc!_]$/)) {
-            waving_hands.setLeftAction(message.sender.name, command[1]);
+            waving_hands.setLeftGesture(message.sender.name, command[1]);
         } else if (command.match(/^R[fpwsdc!_]$/)) {
-            waving_hands.setRightAction(message.sender.name, command[1]);
+            waving_hands.setRightGesture(message.sender.name, command[1]);
         } else {
             console.log('Unknown command: ' + command);
         }
     }
-    if (waving_hands.readyToResolve()) {
+    if (waving_hands.readyToResolveGestures()) {
         resolveThisTurn();
     }
 };
@@ -175,10 +215,13 @@ function resolveThisTurn() {
     if (waving_hands.numberOfWizards() <= 1) {
         logToHistory('Waiting for more wizards to join the game...');
     } else {
-        var summary = waving_hands.resolveTurn();
-        if (summary != '') {
-            ping.sendPublicMessage(summary);
-        }
+        waving_hands.resolveGestures();
+    }
+}
+resolveAndReportSpellEffects = function() {
+    var summary = waving_hands.resolveSpellEffects();
+    if (summary != '') {
+        ping.sendPublicMessage(summary);
     }
     impending_resolve = window.setTimeout(resolveThisTurn, 30000);
 }

@@ -88,20 +88,49 @@ function WavingHands() {
             };
             return name;
         },
-        readyToResolve: function() {
+        setLeftGesture: function(name, gesture) {
+            if (!gesture.match('^[fpwsdc!_]$')) return;
+            var w = this._wizards[name];
+            if (w == null || w.species != 'wizard') return;
+            w.left_history[0] = gesture;
+        },
+        setRightGesture: function(name, gesture) {
+            if (!gesture.match('^[fpwsdc!_]$')) return;
+            var w = this._wizards[name];
+            if (w == null || w.species != 'wizard') return;
+            w.right_history[0] = gesture;
+        },
+        readyToResolveGestures: function() {
             for (var k in this._wizards) {
                 var w = this._wizards[k];
+                if (!w.isStillFighting()) continue;
                 if (w.species != 'wizard') continue;
                 if (w.left_history[0] == 'X') return false;
                 if (w.right_history[0] == 'X') return false;
             }
             return true;
         },
-        resolveTurn: function() {
-            console.log('resolveTurn ' + this.turnNumber);
-            var summary = '';
+        resolveGestures: function() {
             this._resolveInvalidOrders();
-            this._resolveCurrentSpells();
+            this._resolveCurrentSpells();  // calls this.onPossibleSpells()
+        },
+        onPossibleSpells: function(name, possibilities, callback) {
+            console.assert(possibilities.length >= 1);
+            callback(0);
+        },
+        readyToResolveSpellEffects: function() {
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.must_choose_spells_this_turn) {
+                    console.log('readyToResolveSpellEffects false');
+                    return false;
+                }
+            }
+            console.log('readyToResolveSpellEffects true');
+            return true;
+        },
+        resolveSpellEffects: function() {
+            var summary = '';
             this._resolveSpellOrdering();
             summary += this._describeGestures();
             summary += this._resolveSpellEffects();
@@ -122,32 +151,6 @@ function WavingHands() {
                 this._newGame();
             }
             return summary;
-        },
-        setLeftAction: function(name, action) {
-            console.log('setLeftAction ' + name + ' ' + action);
-            if (!action.match('^[fpwsdc!_]$')) return;
-            var w = this._wizards[name];
-            if (w == null || w.species != 'wizard') return;
-            w.left_history[0] = action;
-        },
-        setRightAction: function(name, action) {
-            console.log('setRightAction ' + name + ' ' + action);
-            if (!action.match('^[fpwsdc!_]$')) return;
-            var w = this._wizards[name];
-            if (w == null || w.species != 'wizard') return;
-            w.right_history[0] = action;
-        },
-        setLeftTarget: function(name, targetname) {
-            console.log('setLeftTarget ' + name + ' ' + targetname);
-            var w = this._wizards[name];
-            if (w == null || w.species != 'wizard') return;
-            w.left_targetname = targetname;
-        },
-        setRightTarget: function(name, targetname) {
-            console.log('setRightTarget ' + name + ' ' + targetname);
-            var w = this._wizards[name];
-            if (w == null || w.species != 'wizard') return;
-            w.right_targetname = targetname;
         },
 
         _minHP: function(default_value) {
@@ -210,42 +213,88 @@ function WavingHands() {
             }
             return result;
         },
+        _spellsAreCompatible: function(lspell, rspell) {
+            var rev = function(s) { return s.split('').reverse().join(''); };
+            var lf = rev(lspell.formula);
+            var rf = rev(rspell.formula.match(/(..)/g).map(rev).join(''));
+            for (var i=0; i < Math.min(lf.length, rf.length); ++i) {
+                if (lf[i] != '.' && rf[i] != '.') {
+                    return false;
+                }
+            }
+            return true;
+        },
         _resolveCurrentSpells: function() {
             console.log('resolveCurrentSpells');
+            // Enumerate all possible spell combinations (for each wizard individually),
+            // and then delegate back to our caller via onPossibleSpells() in case
+            // the caller needs to choose one of those options. Always delegate, even
+            // if there are zero possibilities or one possibility, just in case the
+            // caller is depending on this behavior.
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                if (w.species != 'wizard') continue;
-                w.left_spell_this_turn = null;
-                w.right_spell_this_turn = null;
+                if (w.species != 'wizard' || !w.isStillFighting()) continue;
                 var bh = this._interleave(w.left_history, w.right_history);
                 if (bh.startsWith('pp')) {
                     w.has_surrendered = true;
-                } else {
-                    for (var f in this._spellList) {
-                        var spell = this._spellList[f];
-                        var lregex = this._getLeftSpellRegex(spell.formula);
-                        var rregex = this._getRightSpellRegex(spell.formula);
-                        if (bh.search(lregex) == 0) {
-                            if (w.left_spell_this_turn && w.left_spell_this_turn.formula.endsWith(spell.formula)) {
-                                // Do nothing; assume the wizard wants to cast the longer spell. TODO FIXME BUG HACK
-                            } else {
-                                w.left_spell_this_turn = spell;
-                            }
-                        }
-                        if (lregex == rregex) {
-                            // Some spells are bilaterally symmetric.
-                            console.assert(spell.name == 'magic mirror');
-                        } else {
-                            if (bh.search(rregex) == 0) {
-                                if (w.right_spell_this_turn && w.right_spell_this_turn.formula.endsWith(spell.formula)) {
-                                    // Do nothing; assume the wizard wants to cast the longer spell. TODO FIXME BUG HACK
-                                } else {
-                                    w.right_spell_this_turn = spell;
-                                }
-                            }
+                    // Surrendering is not incompatible with casting spells
+                    // (most obviously, shield; but maybe something more complex).
+                }
+                var left_possibilities = [];
+                var right_possibilities = [];
+                for (var f in this._spellList) {
+                    var spell = this._spellList[f];
+                    var lregex = this._getLeftSpellRegex(spell.formula);
+                    var rregex = this._getRightSpellRegex(spell.formula);
+                    if (bh.search(lregex) == 0) {
+                        // This is a possibility with the left hand.
+                        left_possibilities.push(spell);
+                    }
+                    if (bh.search(rregex) == 0) {
+                        // This is a possibility with the left hand.
+                        right_possibilities.push(spell);
+                    }
+                }
+                var both_possibilities = [];
+                var found_possible_accompaniment = {};
+                for (var li=0; li < left_possibilities.length; ++li) {
+                    for (var ri=0; ri < right_possibilities.length; ++ri) {
+                        var lspell = left_possibilities[li];
+                        var rspell = right_possibilities[ri];
+                        if (this._spellsAreCompatible(lspell, rspell)) {
+                            both_possibilities.push({ left: lspell, right: rspell, text: 'cast ' + lspell.name + ' with your left hand and ' + rspell.name + ' with your right hand' });
+                            found_possible_accompaniment['L' + lspell.formula] = true;
+                            found_possible_accompaniment['R' + rspell.formula] = true;
                         }
                     }
                 }
+                for (var li=0; li < left_possibilities.length; ++li) {
+                    var lspell = left_possibilities[li];
+                    if (!found_possible_accompaniment['L' + lspell.formula]) {
+                        both_possibilities.push({ left: lspell, right: null, text: 'cast ' + lspell.name + ' with your left hand' });
+                    }
+                }
+                for (var ri=0; ri < right_possibilities.length; ++ri) {
+                    var rspell = right_possibilities[ri];
+                    if (!found_possible_accompaniment['R' + rspell.formula]) {
+                        both_possibilities.push({ left: null, right: rspell, text: 'cast ' + rspell.name + ' with your right hand' });
+                    }
+                }
+                if (both_possibilities.length == 0) {
+                    both_possibilities.push({ left: null, right: null, text: 'cast no spells this turn' });
+                }
+                var callback = function(turn, w, both_possibilities, index) {
+                    console.log('callback', w, both_possibilities, turn, index);
+                    if (turn != this.turnNumber) {
+                        return;  // no effect if you miss the boat
+                    }
+                    console.assert(w.must_choose_spells_this_turn);
+                    w.left_spell_this_turn = both_possibilities[index].left;
+                    w.right_spell_this_turn = both_possibilities[index].right;
+                    w.must_choose_spells_this_turn = false;
+                }.bind(this, this.turnNumber, w, both_possibilities);
+                w.must_choose_spells_this_turn = true;
+                window.setTimeout(this.onPossibleSpells, 0, w.name, both_possibilities, callback);
             }
         },
         _resolveUntargetedSpell: function(caster, spell) {
@@ -335,8 +384,8 @@ function WavingHands() {
             console.log('describeGestures ' + summary);
             return summary;
         },
-        _describeGesture: function(action, hand) {
-            switch (action) {
+        _describeGesture: function(gesture, hand) {
+            switch (gesture) {
                 case '!': return 'stabs with his ' + hand + ' hand';
                 case 'f': return 'wiggles the fingers of his ' + hand + ' hand';
                 case 'p': return 'proffers the palm of his ' + hand + ' hand';
@@ -347,7 +396,6 @@ function WavingHands() {
             return 'oops';
         },
         _resolveSpellEffects: function() {
-            console.log('resolveSpellEffects ' + JSON.stringify(this._spellsThisTurn));
             var summary = '';
             for (var i=0; i < this._spellsThisTurn.length; ++i) {
                 var s = this._spellsThisTurn[i];
