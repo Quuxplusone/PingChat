@@ -198,11 +198,14 @@ function WavingHands() {
             if (w.right_history[0] == 'X' && w.left_history[0] != 'X') {
                 w.right_history[0] = '_';  // you snooze, you lose
             }
-            if (
-                (w.left_history[0] == 'c' && w.right_history[0] != 'c') ||
-                (w.left_history[0] != 'c' && w.right_history[0] == 'c') ||
-                (w.left_history[0] == '!' && w.right_history[0] == '!')) {
-                w.left_history[0] = w.right_history[0] = '_';  // no double stabs, no Zen
+            if (w.left_history[0] == 'c' && w.right_history[0] != 'c') {
+                w.left_history[0] == '_';  // no Zen
+            }
+            if (w.left_history[0] != 'c' && w.right_history[0] == 'c') {
+                w.right_history[0] == '_';  // no Zen
+            }
+            if (w.left_history[0] == '!' && w.right_history[0] == '!') {
+                w.left_history[0] = w.right_history[0] = '_';  // no double stabs
             }
         },
         _interleave: function(a, b) {
@@ -267,12 +270,16 @@ function WavingHands() {
             for (var li=0; li < left_possibilities.length; ++li) {
                 var lspell = left_possibilities[li];
                 if (!found_possible_accompaniment['L' + lspell.formula]) {
-                    both_possibilities.push({ left: lspell, right: null, text: 'cast ' + lspell.name + ' with your left hand' });
+                    if (lspell.formula.match(/^.*[^.][^.]$/)) {
+                        both_possibilities.push({ left: lspell, right: null, text: 'cast ' + lspell.name + ' using both hands' });
+                    } else {
+                        both_possibilities.push({ left: lspell, right: null, text: 'cast ' + lspell.name + ' with your left hand' });
+                    }
                 }
             }
             for (var ri=0; ri < right_possibilities.length; ++ri) {
                 var rspell = right_possibilities[ri];
-                if (!found_possible_accompaniment['R' + rspell.formula]) {
+                if (!found_possible_accompaniment['R' + rspell.formula] && !rspell.formula.match(/^.*[^.][^.]$/)) {
                     both_possibilities.push({ left: null, right: rspell, text: 'cast ' + rspell.name + ' with your right hand' });
                 }
             }
