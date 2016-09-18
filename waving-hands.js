@@ -213,23 +213,34 @@ function WavingHands() {
             }
             return result;
         },
-        _spellsAreCompatible: function(lspell, rspell) {
-            var rev = function(s) { return s.split('').reverse().join(''); };
-            var lf = rev(lspell.formula);
-            var rf = rev(rspell.formula.match(/(..)/g).map(rev).join(''));
-            for (var i=0; i < Math.min(lf.length, rf.length); ++i) {
-                if (lf[i] != '.' && rf[i] != '.') {
-                    return false;
-                }
-            }
-            return true;
-        },
         _resolveCurrentSpells: function(w) {
             // Enumerate all possible spell combinations (for each wizard individually),
             // and then delegate back to our caller via onPossibleSpells() in case
             // the caller needs to choose one of those options. Always delegate, even
             // if there are zero possibilities or one possibility, just in case the
             // caller is depending on this behavior.
+            var rev = function(s) { return s.split('').reverse().join(''); };
+            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(XX)*'); }
+            var getLeftSpellRegex = function(lspell) {
+                // Given a left-handed spell formula, return a regex that will match an interleaved history
+                // ending with that spell on the left hand. E.g., given "w.w.s.", return "^s.w.w..*$".
+                // For user-friendliness we allow missed turns, i.e. the regex actually returned
+                // for "w.w.s." is "^s.(XX)*w.(XX)*w..*$". This is AGAINST the official rules of Waving Hands!
+                return '^' + allow_missed_turns(rev(lspell)) + '.*$';
+            };
+            var getRightSpellRegex = function(lspell) {
+                var rspell = lspell.match(/(..)/g).map(rev).join('');
+                return '^' + allow_missed_turns(rev(rspell)) + '.*$';
+            };
+            var areSpellsCompatible = function(lspell, rspell) {
+                var lf = rev(lspell.formula);
+                var rf = rev(rspell.formula.match(/(..)/g).map(rev).join(''));
+                for (var i=0; i < Math.min(lf.length, rf.length); ++i) {
+                    if (lf[i] != '.' && rf[i] != '.') return false;
+                }
+                return true;
+            };
+
             var bh = this._interleave(w.left_history, w.right_history);
             if (bh.startsWith('pp')) {
                 w.is_surrendering = true;
@@ -240,8 +251,8 @@ function WavingHands() {
             var right_possibilities = [];
             for (var f in this._spellList) {
                 var spell = this._spellList[f];
-                var lregex = this._getLeftSpellRegex(spell.formula);
-                var rregex = this._getRightSpellRegex(spell.formula);
+                var lregex = getLeftSpellRegex(spell.formula);
+                var rregex = getRightSpellRegex(spell.formula);
                 if (bh.search(lregex) == 0) {
                     // This is a possibility with the left hand.
                     left_possibilities.push(spell);
@@ -257,7 +268,7 @@ function WavingHands() {
                 for (var ri=0; ri < right_possibilities.length; ++ri) {
                     var lspell = left_possibilities[li];
                     var rspell = right_possibilities[ri];
-                    if (this._spellsAreCompatible(lspell, rspell)) {
+                    if (areSpellsCompatible(lspell, rspell)) {
                         both_possibilities.push({ left: lspell, right: rspell, text: 'cast ' + lspell.name + ' with your left hand and ' + rspell.name + ' with your right hand' });
                         found_possible_accompaniment['L' + lspell.formula] = true;
                         found_possible_accompaniment['R' + rspell.formula] = true;
@@ -468,23 +479,6 @@ function WavingHands() {
                 w.pending_cure_wounds = 0;
                 w.was_damaged_this_turn = false;
             }
-        },
-        _getLeftSpellRegex: function(lspell) {
-            // Given a left-handed spell formula, return a regex that will match an interleaved history
-            // ending with that spell on the left hand. E.g., given "w.w.s.", return "^s.w.w..*$".
-            // For user-friendliness we allow missed turns, i.e. the regex actually returned
-            // for "w.w.s." is "^s.(XX)*w.(XX)*w..*$". This is AGAINST the official rules of Waving Hands!
-            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(XX)*'); }
-            var rev = function(s) { return s.split('').reverse().join(''); };
-            return '^' + allow_missed_turns(rev(lspell)) + '.*$';
-        },
-        _getRightSpellRegex: function(lspell) {
-            // Given a left-handed spell formula, return a regex that will match an interleaved history
-            // ending with that spell on the right hand.
-            var allow_missed_turns = function(s) { return s.match(/(..)/g).join('(XX)*'); }
-            var rev = function(s) { return s.split('').reverse().join(''); };
-            var rspell = lspell.match(/(..)/g).map(rev).join('');
-            return '^' + allow_missed_turns(rev(rspell)) + '.*$';
         },
         _initSpellList: function() {
             for (var f in this._spellList) {
