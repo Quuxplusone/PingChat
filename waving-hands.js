@@ -5,6 +5,7 @@ function WavingHands() {
             this.turnNumber = 1;
             this.game_over = false;
             this._wizards = {};
+            this._pending_questions = 0;
             this.onNewGame();
         },
         onNewGame: function() {
@@ -118,50 +119,22 @@ function WavingHands() {
             return true;
         },
         resolveGestures: function() {
+            console.assert(this._pending_questions == 0);
             for (var k in this._wizards) {
                 var w = this._wizards[k];
                 if (w.species != 'wizard' || !w.isStillFighting()) continue;
                 this._resolveInvalidOrders(w);
+                this._pending_questions += 1;
+            }
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                if (w.species != 'wizard' || !w.isStillFighting()) continue;
                 this._resolveCurrentSpells(w);  // calls this.onPossibleSpells()
             }
         },
         onPossibleSpells: function(name, possibilities, callback) {
             console.assert(possibilities.length >= 1);
             callback(0);
-        },
-        readyToResolveSpellEffects: function() {
-            for (var k in this._wizards) {
-                var w = this._wizards[k];
-                if (w.species == 'wizard' && w.isStillFighting() && !w.has_chosen_spells_this_turn) {
-                    console.log('readyToResolveSpellEffects false');
-                    return false;
-                }
-            }
-            console.log('readyToResolveSpellEffects true');
-            return true;
-        },
-        resolveSpellEffects: function() {
-            var summary = '';
-            this._resolveSpellOrdering();
-            summary += this._describeGestures();
-            summary += this._applyAndDescribeSpellEffects();
-            summary += this._describeAftermath();
-            summary += this._checkForVictory();
-            this._resetAtEndOfTurn();
-            this.onEndOfTurn(summary);
-            if (!this.game_over) {
-                this.turnNumber += 1;
-                for (var k in this._wizards) {
-                    var w = this._wizards[k];
-                    if (w.species != 'wizard') continue;
-                    w.left_history.unshift('X');
-                    w.right_history.unshift('X');
-                    console.assert(w.left_history.length === this.turnNumber);
-                    console.assert(w.right_history.length === this.turnNumber);
-                }
-            } else {
-                this._newGame();
-            }
         },
         onEndOfTurn: function(summary) {
             // do nothing
@@ -219,7 +192,7 @@ function WavingHands() {
             }
         },
         _resolveCurrentSpells: function(w) {
-            // Enumerate all possible spell combinations (for each wizard individually),
+            // Enumerate all possible spell combinations (for this wizard individually),
             // and then delegate back to our caller via onPossibleSpells() in case
             // the caller needs to choose one of those options. Always delegate, even
             // if there are zero possibilities or one possibility, just in case the
@@ -308,15 +281,31 @@ function WavingHands() {
                 both_possibilities.push({ left: null, right: null, text: 'cast no spells this turn' });
             }
             var callback = function(turn, w, both_possibilities, index) {
-                console.log('callback', w, both_possibilities, turn, index);
                 if (turn != this.turnNumber || w.has_chosen_spells_this_turn) {
                     return;  // no effect if you miss the boat
                 }
                 w.left_spell_this_turn = both_possibilities[index].left;
                 w.right_spell_this_turn = both_possibilities[index].right;
-                w.has_chosen_spells_this_turn = true;
+                this._pending_questions -= 1;
+                if (this._pending_questions == 0) {
+                    this._resolveSpellEffects();
+                }
             }.bind(this, this.turnNumber, w, both_possibilities);
             this.onPossibleSpells(w.name, both_possibilities, callback);
+        },
+        _resolveSpellEffects: function() {
+            console.log('resolving spell effects...');
+            var summary = '';
+            this._resolveSpellOrdering();
+            summary += this._describeGestures();
+            summary += this._applyAndDescribeSpellEffects();
+            summary += this._describeAftermath();
+            summary += this._checkForVictory();
+            this._resetAtEndOfTurn();
+            this.onEndOfTurn(summary);
+            if (this.game_over) {
+                this._newGame();
+            }
         },
         _resolveUntargetedSpell: function(caster, spell) {
             switch (spell.default_target) {
@@ -481,6 +470,7 @@ function WavingHands() {
             }
         },
         _resetAtEndOfTurn: function() {
+            this.turnNumber += 1;
             for (var k in this._wizards) {
                 var w = this._wizards[k];
                 w.has_chosen_spells_this_turn = false;
@@ -491,6 +481,10 @@ function WavingHands() {
                 w.is_surrendering = false;
                 w.pending_cure_wounds = 0;
                 w.was_damaged_this_turn = false;
+                if (w.species == 'wizard') {
+                    w.left_history.unshift('X');
+                    w.right_history.unshift('X');
+                }
             }
         },
         _initSpellList: function() {

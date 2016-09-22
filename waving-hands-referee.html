@@ -189,17 +189,11 @@ function resolveThisTurn() {
         waving_hands.resolveGestures();
     }
 }
-function resolveAndReportSpellEffects() {
-    waving_hands.resolveSpellEffects();
-}
 waving_hands.onPossibleSpells = function(wizname, possibilities, callback) {
     console.log(possibilities);
     var selectChoice = function(wizname, callback, index) {
         privateMessageHandlers[wizname] = null; // unregister me
         callback(index);
-        if (waving_hands.readyToResolveSpellEffects()) {
-            window.setTimeout(resolveAndReportSpellEffects, 0);
-        }
     }.bind(null, wizname, callback);
     if (possibilities.length == 1) {
         selectChoice(0);
