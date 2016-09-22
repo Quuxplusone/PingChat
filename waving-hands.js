@@ -5,6 +5,10 @@ function WavingHands() {
             this.turnNumber = 1;
             this.game_over = false;
             this._wizards = {};
+            this.onNewGame();
+        },
+        onNewGame: function() {
+            // do nothing
         },
         numberOfJoinedWizards: function() {
             var count = 0;
@@ -144,6 +148,7 @@ function WavingHands() {
             summary += this._describeAftermath();
             summary += this._checkForVictory();
             this._resetAtEndOfTurn();
+            this.onEndOfTurn(summary);
             if (!this.game_over) {
                 this.turnNumber += 1;
                 for (var k in this._wizards) {
@@ -157,7 +162,9 @@ function WavingHands() {
             } else {
                 this._newGame();
             }
-            return summary;
+        },
+        onEndOfTurn: function(summary) {
+            // do nothing
         },
 
         _minHP: function(default_value) {
