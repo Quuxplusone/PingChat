@@ -6,13 +6,19 @@ function WavingHands() {
             this.game_over = false;
             this._wizards = {};
         },
-        numberOfWizards: function() {
+        numberOfJoinedWizards: function() {
             var count = 0;
             for (var k in this._wizards) {
                 var w = this._wizards[k];
-                if (w.species == 'wizard') {
-                    count += 1;
-                }
+                count += (w.species == 'wizard');
+            }
+            return count;
+        },
+        numberOfFightingWizards: function() {
+            var count = 0;
+            for (var k in this._wizards) {
+                var w = this._wizards[k];
+                count += (w.species == 'wizard' && w.isStillFighting());
             }
             return count;
         },
@@ -20,7 +26,7 @@ function WavingHands() {
             if (name in this._wizards) {
                 return false;  // there's already a wizard by that name in the arena
             }
-            if (this.turnNumber != 1 && this.numberOfWizards() <= 2) {
+            if (this.turnNumber != 1 && this.numberOfFightingWizards() <= 2) {
                 return false;  // only two wizards left; this arena is closed to newcomers
             }
             this._wizards[name] = {
@@ -205,14 +211,6 @@ function WavingHands() {
                 w.left_history[0] = w.right_history[0] = '_';  // no double stabs
             }
         },
-        _interleave: function(a, b) {
-            var result = "";
-            console.assert(a.length == b.length);
-            for (var i=0; i < a.length; ++i) {
-                result += a[i] + b[i];
-            }
-            return result;
-        },
         _resolveCurrentSpells: function(w) {
             // Enumerate all possible spell combinations (for each wizard individually),
             // and then delegate back to our caller via onPossibleSpells() in case
@@ -240,8 +238,16 @@ function WavingHands() {
                 }
                 return true;
             };
+            var interleave = function(a, b) {
+                var result = "";
+                console.assert(a.length == b.length);
+                for (var i=0; i < a.length; ++i) {
+                    result += a[i] + b[i];
+                }
+                return result;
+            };
 
-            var bh = this._interleave(w.left_history, w.right_history);
+            var bh = interleave(w.left_history, w.right_history);
             if (bh.startsWith('pp')) {
                 w.is_surrendering = true;
                 // Surrendering is not incompatible with casting spells

@@ -217,7 +217,7 @@ var impending_resolve = null;
 function resolveThisTurn() {
     window.clearTimeout(impending_resolve);
     document.title = 'Turn ' + waving_hands.turnNumber;
-    if (waving_hands.numberOfWizards() <= 1) {
+    if (waving_hands.numberOfJoinedWizards() <= 1) {
         logToHistory('Waiting for more wizards to join the game...');
     } else {
         currently_accepting_gestures = false;
