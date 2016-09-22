@@ -8,7 +8,8 @@
         Messages are broadcast to everyone <i>in the room right now</i>; they are not saved anywhere.</p>
 
         <div style="position:fixed;right:0;top:0;">
-            <input type="button" id="ScrollLock" onclick="onclickSL(this)" value="Autoscroll is ON"></input>
+            <div><input type="button" id="ScrollLock" onclick="onclickSL(this)" value="Autoscroll is ON"></input></div>
+            <div><input type="button" id="DebugLock" onclick="onclickDL(this)" value="Debug mode is OFF"></input></div>
             <div id="WavingHandsJoinButton" style="display:none;">
                 <button onclick="sendWavingHands('join')">Play Waving Hands</button>
             </div>
@@ -33,8 +34,8 @@
 <script src="./ping.js"></script>
 <script type="text/javascript">
 
-var debug_mode = false;
 var autoscroll_mode = true;
+var debug_mode = false;
 var waving_hands_referee = null;
 var ping = null;
 
@@ -53,6 +54,11 @@ function unhideWavingHandsButtons(args) {
 function onclickSL(button) {
     autoscroll_mode = !autoscroll_mode;
     button.value = 'Autoscroll is ' + (autoscroll_mode ? 'ON' : 'OFF');
+}
+
+function onclickDL(button) {
+    debug_mode = !debug_mode;
+    button.value = 'Debug mode is ' + (debug_mode ? 'ON' : 'OFF');
 }
 
 function maybeScrollDown() {
